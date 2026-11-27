@@ -35,3 +35,43 @@ export const finalLineups = [
     ]
   }
 ];
+
+// Alternativas da delegação; o banco da súmula ainda não está confirmado.
+finalLineups[0].bench = [
+  {name:'Marcelo Lomba',position:'Goleiro'},
+  {name:'Benedetti',position:'Zagueiro'},
+  {name:'Bruno Fuchs',position:'Zagueiro'},
+  {name:'Khellven',position:'Lateral'},
+  {name:'Arthur',position:'Lateral'},
+  {name:'Andreas Pereira',position:'Meio-campista'},
+  {name:'Emiliano Martínez',position:'Volante'},
+  {name:'Larson',position:'Volante'},
+  {name:'Erick Belé',position:'Meia'},
+  {name:'Felipe Anderson',position:'Meia'},
+  {name:'Mauricio',position:'Meia'},
+  {name:'Ramón Sosa',position:'Atacante'},
+  {name:'Bruno Bertinato',position:'Goleiro',status:'Corte previsto pela imprensa'},
+  {name:'Luis Pacheco',position:'Volante',status:'Corte previsto pela imprensa'},
+  {name:'Heittor',position:'Atacante',status:'Corte previsto pela imprensa'},
+  {name:'Fabiano',position:'Atacante',status:'Corte previsto pela imprensa'},
+  {name:'Paulinho',position:'Atacante',available:false,status:'Sem condição de jogo'}
+];
+finalLineups[1].bench = [
+  {name:'Fabricio Iacovich',position:'Goleiro'},
+  {name:'Rodrigo Borzone',position:'Goleiro'},
+  {name:'Ramiro Funes Mori',position:'Defensor'},
+  {name:'Tomás Palacios',position:'Defensor'},
+  {name:'Santiago Arzamendia',position:'Defensor'},
+  {name:'Gastón Benedetti',position:'Defensor'},
+  {name:'Eric Meza',position:'Defensor'},
+  {name:'José Sosa',position:'Meio-campista'},
+  {name:'Bautista Kociubinski',position:'Meio-campista'},
+  {name:'Jalil Elias',position:'Meio-campista'},
+  {name:'Miguel Monsalve',position:'Meio-campista'},
+  {name:'Brian Aguirre',position:'Meio-campista'},
+  {name:'Joaquín Correa',position:'Meio-campista',status:'Em recuperação; disponibilidade em avaliação'},
+  {name:'Edwuin Cetré',position:'Atacante'},
+  {name:'Lucas Alario',position:'Atacante'},
+  {name:'Adolfo Gaich',position:'Atacante'},
+  {name:'Baltasar Rodríguez',position:'Meio-campista',available:false,status:'Suspenso'}
+];

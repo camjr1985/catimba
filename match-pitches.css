@@ -65,6 +65,7 @@
 
 .match-pitches__row {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-evenly;
   gap: .2rem;
@@ -73,7 +74,7 @@
 
 .match-pitches__player {
   display: flex;
-  flex: 1 1 0;
+  flex: 1 1 58px;
   flex-direction: column;
   align-items: center;
   gap: .3rem;
@@ -83,14 +84,18 @@
 }
 
 .match-pitches__button {
-  display: grid;
-  place-items: center;
-  width: 56px;
-  height: 56px;
-  flex: 0 0 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .3rem;
+  width: 100%;
+  min-height: 44px;
+  height: auto;
+  min-width: 0;
+  flex: none;
   margin: 0;
   border: 0;
-  border-radius: 50%;
+  border-radius: 6px;
   padding: 0;
   background: transparent;
   cursor: pointer;
@@ -127,6 +132,32 @@
 .match-pitches__empty { padding: 1rem; color: #fff; }
 .match-pitches__row--unknown { border-top: 1px dashed #ddf2de; padding-top: 1rem; }
 
+.match-pitches__toolbar { grid-column: 1 / -1; min-width: 0; }
+.match-pitches__instructions { margin: .6rem 0 0; color: #e8e8e8; line-height: 1.5; }
+.match-pitches__control { display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch; gap: .4rem; min-width: 0; margin: 0 0 .9rem; font-size: 1rem; }
+.match-pitches__control > span { font-weight: 700; }
+.match-pitches__select,
+.match-pitches__input { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; border: 1px solid #888; border-radius: 6px; padding: .65rem; background: #fff; color: #171717; font: inherit; font-size: 1rem; text-align: left; }
+.match-pitches__select { appearance: none; padding-right: 2rem; background-image: linear-gradient(45deg, transparent 50%, #171717 50%), linear-gradient(135deg, #171717 50%, transparent 50%); background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%; background-size: 5px 5px; background-repeat: no-repeat; }
+.match-pitches__select:focus-visible,
+.match-pitches__input:focus-visible,
+.match-pitches__action:focus-visible { outline: 3px solid #ffdf00; outline-offset: 3px; }
+.match-pitches__team-actions { display: flex; flex-wrap: wrap; gap: .6rem; margin: .9rem 0; }
+.match-pitches__action { min-height: 44px; max-width: 100%; border: 1px solid #ffdf00; border-radius: 6px; padding: .65rem .8rem; background: #ffdf00; color: #111; font: inherit; font-weight: 700; line-height: 1.4; cursor: pointer; }
+.match-pitches__action--secondary { border-color: #aaa; background: #343434; color: #fff; }
+.match-pitches__action:disabled,
+.match-pitches__button:disabled { cursor: not-allowed; opacity: .55; }
+.match-pitches__editor { margin: .9rem 0; border: 1px solid #808080; border-radius: 8px; padding: .8rem; background: #191919; }
+.match-pitches__editor[hidden] { display: none; }
+.match-pitches__editor-heading { margin: 0 0 1rem; color: #ffdf00; font-size: 1rem; overflow-wrap: anywhere; }
+.match-pitches__editor-status { margin: .5rem 0; color: #ffed8a; font-size: .875rem; line-height: 1.5; }
+.match-pitches__editor-help { margin: .7rem 0 0; color: #ddd; font-size: .875rem; line-height: 1.5; }
+.match-pitches__bench { margin-top: 1rem; border-top: 1px solid #555; padding-top: .9rem; font-size: .875rem; line-height: 1.5; }
+.match-pitches__bench > summary { color: #ffed8a; cursor: pointer; font-size: 1rem; }
+.match-pitches__bench > summary:focus-visible { outline: 3px solid #ffdf00; outline-offset: 3px; }
+.match-pitches__bench-list { padding-left: 1.2rem; }
+.match-pitches__bench-list li { margin: .4rem 0; overflow-wrap: anywhere; }
+
 @media (max-width: 760px) {
   .match-pitches { grid-template-columns: minmax(0, 1fr); }
   .match-pitches__field { min-height: 620px; }
@@ -136,10 +167,10 @@
   .match-pitches__team { padding: .55rem; }
   .match-pitches__field { min-height: 680px; padding-right: .1rem; padding-left: .1rem; }
   .match-pitches__row { gap: .1rem; }
-  .match-pitches__button { width: 48px; height: 48px; flex-basis: 48px; }
   .match-pitches__disk { width: 44px; height: 44px; border-width: 4px; font-size: .875rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .match-pitches__disk { transition: none; }
 }
+.match-pitches__action--secondary:hover{background:#454545;color:#fff}

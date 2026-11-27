@@ -34,7 +34,7 @@ const fixtures = [
   ].map(([home,away,stadium],i)=>cbfMatch(371+i,38,home,away,stadium,'2026-12-02T21:30:00-03:00')),
   {id:'libertadores:2026:final:palmeiras-estudiantes',competition:'libertadores',season:'2026',round:'final',home:'Palmeiras',away:'Estudiantes',stadium:'Centenário, Montevidéu',kickoff:'2026-11-28T17:00:00-03:00'}
 ];
-const blankState = () => ({version:2,participants:[{id:'carlinhos',name:'Carlinhos'},{id:'tiba',name:'Tiba'}],predictions:{},results:{},champions:{},lineups:{},legacy:{},updatedAt:null});
+const blankState = () => ({version:2,participants:[{id:'carlinhos',name:'Carlinhos'},{id:'tiba',name:'Tiba'}],predictions:{},results:{},champions:{},lineups:{},teamLineups:{},legacy:{},updatedAt:null});
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const validScore = value => value === null || (Number.isInteger(value) && value >= 0 && value <= 99);
 const validPair = value => Array.isArray(value) && value.length === 2 && value.every(validScore);
@@ -53,6 +53,17 @@ function validateState(value) {
   if (Object.values(value.results).some(pair=>!validPair(pair))) return false;
   if (Object.entries(value.champions).some(([id,team])=>!ids.has(id)||!['','Palmeiras','Estudiantes'].includes(team))) return false;
   for (const [id,lineup] of Object.entries(value.lineups)) if (!ids.has(id)||!isRecord(lineup)||typeof lineup.teamName!=='string'||lineup.teamName.length>100||!Array.isArray(lineup.players)||lineup.players.length!==11||lineup.players.some(name=>typeof name!=='string'||name.length>100)) return false;
+  if(value.teamLineups!==undefined) {
+    if(!isRecord(value.teamLineups))return false;
+    for(const [id,teams] of Object.entries(value.teamLineups)) {
+      if(!ids.has(id)||!isRecord(teams))return false;
+      for(const [team,lineup] of Object.entries(teams)) {
+        if(!['Palmeiras','Estudiantes'].includes(team)||!isRecord(lineup)||typeof lineup.formation!=='string'||lineup.formation.length>50||!Array.isArray(lineup.players)||lineup.players.length!==11)return false;
+        if(lineup.players.some(player=>!isRecord(player)||typeof player.name!=='string'||!player.name.trim()||player.name.length>100||typeof player.position!=='string'||player.position.length>100||!Number.isInteger(player.row)||player.row<0||player.row>3))return false;
+        if(new Set(lineup.players.map(player=>normal(player.name))).size!==11)return false;
+      }
+    }
+  }
   return true;
 }
 function recoverWarning(message) { $('storage-notice').hidden=false; $('storage-notice').textContent=message; }
@@ -74,6 +85,7 @@ function loadState() {
     if (saved) {
       const parsed=JSON.parse(saved);
       if (!validateState(parsed)) throw new Error('Formato do histórico inválido');
+      parsed.teamLineups??={};
       return parsed;
     }
     const old=JSON.parse(localStorage.getItem('catimba') || '{}');
@@ -171,11 +183,25 @@ function renderGames() {
   renderChampions();renderRanking();
 }
 function renderPitch() { mountPitch($('pitch'),{participants:state.participants,lineups:state.lineups,onSave:(id,lineup)=>{state.lineups[id]=lineup;return persist('Campinho salvo neste navegador.');}}); }
+function renderMatchPitches() {
+  mountMatchPitches($('match-pitches'),finalLineups,{participants:state.participants,edits:state.teamLineups,onSave:(id,team,lineup)=>{
+    const candidate={...state,teamLineups:{...state.teamLineups,[id]:{...state.teamLineups[id],[team]:lineup}}};
+    if(!validateState(candidate))return false;
+    state.teamLineups[id]??={};state.teamLineups[id][team]=lineup;return persist('Escalação da final salva neste navegador.');
+  }});
+}
+function renderOriginalLineups() {
+  $('original-lineups').replaceChildren(...finalLineups.map(team=>{
+    const card=element('article');
+    card.append(element('h4',`${team.name} · ${team.formation}`),element('p',`Treinador: ${team.coach}`),element('p',team.players.map(player=>player.name).join('; ')+'.'));
+    const source=element('a',team.sourceLabel);source.href=team.sourceUrl;source.target='_blank';source.rel='noopener noreferrer';card.append(source);return card;
+  }));
+}
 $('guest-form').onsubmit=event=>{
   event.preventDefault();const name=$('guest-name').value.trim().replace(/\s+/g,' ');
   if(!name||state.participants.some(p=>normal(p.name)===normal(name))) { $('guest-status').textContent='Digite um nome diferente dos participantes já cadastrados.';return; }
   if(state.participants.length>=100) {$('guest-status').textContent='Limite de 100 participantes atingido.';return;}
-  state.participants.push({id:`guest-${crypto.randomUUID()}`,name});const saved=persist();$('guest-name').value='';$('guest-status').textContent=saved?`${name} entrou no Catimba. Já pode palpitar e montar seu campinho.`:`${name} foi adicionado, mas não foi possível salvar. Exporte uma cópia.`;renderGames();renderPitch();
+  state.participants.push({id:`guest-${crypto.randomUUID()}`,name});const saved=persist();$('guest-name').value='';$('guest-status').textContent=saved?`${name} entrou no Catimba. Já pode palpitar e montar seu campinho.`:`${name} foi adicionado, mas não foi possível salvar. Exporte uma cópia.`;renderGames();renderPitch();renderMatchPitches();
 };
 $('search').oninput=renderGames;$('round').onchange=renderGames;
 $('competition').onchange=$('season').onchange=()=>{renderRounds();renderGames();refreshStandings();};
@@ -190,8 +216,9 @@ $('import').onchange=async()=>{
     let imported=JSON.parse(await file.text());
     if(isRecord(imported)&&imported.version===undefined&&Object.keys(imported).length&&Object.entries(imported).every(([key,values])=>/^\d+-\d+$/.test(key)&&Array.isArray(values)&&values.length===6&&values.every(validScore)))imported=migrateLegacy(imported);
     if(!validateState(imported))throw new Error('format');
+    imported.teamLineups??={};
     localStorage.setItem(`catimba:before-import:${Date.now()}`,JSON.stringify(state));
-    localStorage.setItem(KEY,JSON.stringify(imported));state=imported;syncLegacyFixture();$('backup-status').textContent='Histórico restaurado. A versão anterior ficou guardada neste navegador.';renderRounds();renderGames();renderPitch();
+    localStorage.setItem(KEY,JSON.stringify(imported));state=imported;syncLegacyFixture();$('backup-status').textContent='Histórico restaurado. A versão anterior ficou guardada neste navegador.';renderRounds();renderGames();renderPitch();renderMatchPitches();
   } catch { $('backup-status').textContent='Não foi possível restaurar. Use um arquivo de histórico do Catimba exportado nesta versão. Seus palpites atuais foram mantidos.'; }
   $('import').value='';
 };
@@ -246,5 +273,5 @@ async function refreshStandings() {
   } finally { if(request===standingsRequest)$('refresh-standings').disabled=false; }
 }
 $('refresh-standings').onclick=refreshStandings;
-mountMatchPitches($('match-pitches'),finalLineups);
+renderOriginalLineups();renderMatchPitches();
 renderRounds();renderGames();renderPitch();refreshStandings();
