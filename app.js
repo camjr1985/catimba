@@ -184,7 +184,7 @@ function renderGames() {
 }
 function renderPitch() { mountPitch($('pitch'),{participants:state.participants,lineups:state.lineups,onSave:(id,lineup)=>{state.lineups[id]=lineup;return persist('Campinho salvo neste navegador.');}}); }
 function renderMatchPitches() {
-  mountMatchPitches($('match-pitches'),finalLineups,{participants:state.participants,edits:state.teamLineups,onSave:(id,team,lineup)=>{
+  mountMatchPitches($('match-pitches'),finalLineups,{competitionLabel:'FINAL · LIBERTADORES 2026',kickoffLabel:'CENTENÁRIO · 28/11 · 17H BR | 20H PT',participants:state.participants,edits:state.teamLineups,onSave:(id,team,lineup)=>{
     const candidate={...state,teamLineups:{...state.teamLineups,[id]:{...state.teamLineups[id],[team]:lineup}}};
     if(!validateState(candidate))return false;
     state.teamLineups[id]??={};state.teamLineups[id][team]=lineup;return persist('Escalação da final salva neste navegador.');

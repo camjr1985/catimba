@@ -9,10 +9,35 @@
   <link rel="stylesheet" href="match-pitches.css">
 </head>
 <body>
-  <header>
-    <p class="eyebrow">FUTEBOL, RESENHA E PALPITE</p>
-    <h1>CATIMBA</h1>
-    <b>DO CARLINHOS, TIBA E CONVIDADOS</b>
+  <header class="site-header">
+    <div class="hero-inner">
+      <div class="hero-brand">
+        <p class="eyebrow">FUTEBOL, RESENHA E PALPITE</p>
+        <h1>CATIMBA</h1>
+        <b>DO CARLINHOS E TIBA</b>
+        <p class="hero-tagline">A resenha dos nossos podcasts, com convidados e os seus palpites.</p>
+      </div>
+      <div class="host-cards" aria-label="Apresentadores e podcasts do Catimba">
+        <article class="host-card" aria-labelledby="host-carlinhos">
+          <div class="host-photo host-photo--carlinhos">
+            <img src="assets/carlinhos-referencia.png" alt="Carlinhos com a camisa do Flamengo e os braços abertos, na foto da arte do Catimba" width="696" height="393">
+          </div>
+          <div class="host-meta">
+            <img class="podcast-logo" src="assets/logo-resenha.png" alt="Logo do Resenha Esporte+" width="1080" height="1080">
+            <div class="host-copy"><h2 id="host-carlinhos">CARLINHOS</h2><p>Resenha Esporte+</p></div>
+          </div>
+        </article>
+        <article class="host-card" aria-labelledby="host-tiba">
+          <div class="host-photo host-photo--tiba">
+            <img src="assets/foto-tiba.png" alt="Tiba, de óculos e camiseta branca, em frente às camisas de futebol" width="1080" height="1080">
+          </div>
+          <div class="host-meta">
+            <img class="podcast-logo" src="assets/logo-tiba-cast.png" alt="Logo do Tiba Cast" width="1080" height="1080">
+            <div class="host-copy"><h2 id="host-tiba">TIBA</h2><p>Tiba Cast</p></div>
+          </div>
+        </article>
+      </div>
+    </div>
   </header>
   <main>
     <p class="notice" id="storage-notice" hidden></p>
