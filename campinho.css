@@ -1,0 +1,162 @@
+.catimba-pitch {
+  margin: 1rem 0;
+  overflow: hidden;
+  border: 1px solid #454545;
+  border-radius: 12px;
+  background: #292929;
+  color: #fff;
+}
+
+.catimba-pitch__summary {
+  padding: 1.1rem;
+  color: #ffdf00;
+  font-size: 1.15rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.catimba-pitch__summary::marker { color: #ffdf00; }
+.catimba-pitch__summary:focus-visible { outline: 3px solid #fff; outline-offset: -5px; }
+.catimba-pitch__body { padding: 0 1rem 1rem; }
+.catimba-pitch__intro { margin: 0 0 1rem; color: #e0e0e0; line-height: 1.5; }
+.catimba-pitch__form { margin: 0; }
+
+.catimba-pitch__controls {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.catimba-pitch__control {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: .45rem;
+  min-width: 0;
+  margin: 0;
+  font-weight: 700;
+}
+
+.catimba-pitch__select,
+.catimba-pitch__team-input,
+.catimba-pitch__player-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid #737373;
+  border-radius: 6px;
+  padding: .6rem;
+  background: #fff;
+  color: #171717;
+  font: inherit;
+  font-size: 1rem;
+  text-align: left;
+}
+
+.catimba-pitch__select {
+  appearance: none;
+  padding-right: 2rem;
+  background-image: linear-gradient(45deg, transparent 50%, #171717 50%), linear-gradient(135deg, #171717 50%, transparent 50%);
+  background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+
+.catimba-pitch__team-input:focus-visible,
+.catimba-pitch__select:focus-visible,
+.catimba-pitch__player-input:focus-visible,
+.catimba-pitch__save:focus-visible {
+  outline: 3px solid #ffdf00;
+  outline-offset: 3px;
+}
+
+.catimba-pitch__field {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1.4rem;
+  min-height: 540px;
+  isolation: isolate;
+  overflow: hidden;
+  border: 3px solid #d2ecd7;
+  border-radius: 8px;
+  padding: 1.3rem .6rem;
+  background: repeating-linear-gradient(to bottom, #195e36 0, #195e36 12.5%, #216d40 12.5%, #216d40 25%);
+}
+
+.catimba-pitch__field::before {
+  position: absolute;
+  z-index: -1;
+  inset: 50% 0 auto;
+  border-top: 2px solid #d2ecd7b3;
+  content: '';
+}
+
+.catimba-pitch__field::after {
+  position: absolute;
+  z-index: -1;
+  top: 50%;
+  left: 50%;
+  width: 90px;
+  height: 90px;
+  transform: translate(-50%, -50%);
+  border: 2px solid #d2ecd7b3;
+  border-radius: 50%;
+  content: '';
+}
+
+.catimba-pitch__row {
+  display: grid;
+  gap: .5rem;
+  align-items: start;
+  width: 100%;
+}
+
+.catimba-pitch__row--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.catimba-pitch__row--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.catimba-pitch__row--1 { grid-template-columns: minmax(0, 175px); justify-content: center; }
+
+.catimba-pitch__player {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: .4rem;
+  min-width: 0;
+  margin: 0;
+  padding: .4rem;
+  border-radius: 7px;
+  background: #07341ed9;
+}
+
+.catimba-pitch__position {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5em;
+  color: #fff;
+  font-size: .875rem;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.catimba-pitch__player-input { padding: .5rem .25rem; text-align: center; }
+.catimba-pitch__actions { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem; margin-top: 1rem; }
+.catimba-pitch__save { min-height: 44px; border: 0; border-radius: 6px; padding: .75rem 1rem; background: #ffdf00; color: #111; font: inherit; font-weight: 700; cursor: pointer; }
+.catimba-pitch__status { margin: 0; color: #e0e0e0; line-height: 1.4; }
+.catimba-pitch :disabled { opacity: .6; cursor: not-allowed; }
+
+@media (max-width: 540px) {
+  .catimba-pitch__body { padding: 0 .65rem .8rem; }
+  .catimba-pitch__controls { grid-template-columns: 1fr; }
+  .catimba-pitch__field { padding: .85rem .2rem; min-height: 570px; gap: 1.2rem; }
+  .catimba-pitch__row { gap: .2rem; }
+  .catimba-pitch__player { padding: .3rem .12rem; }
+  .catimba-pitch__row--4 .catimba-pitch__position { min-height: 3.8em; }
+}

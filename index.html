@@ -1,1 +1,91 @@
-<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CATIMBA | Palpites</title><style>*{box-sizing:border-box}body{margin:0;background:#181818;color:white;font:16px Arial}header{background:#ffdf00;color:#111;padding:30px;text-align:center}h1{font-size:clamp(60px,12vw,110px);margin:0;color:white;-webkit-text-stroke:2px black;text-shadow:4px 5px black}header b{background:#111;color:#ffdf00;padding:8px}main{max-width:850px;margin:auto;padding:20px}article,section{background:#292929;padding:18px;border-radius:12px;margin:15px 0}h2{color:#ffdf00}button,select{background:#ffdf00;color:#111;border:0;padding:12px;border-radius:6px;font-weight:bold}input{width:55px;padding:9px;font-size:18px;text-align:center}label{display:flex;justify-content:space-between;align-items:center;margin:12px 0}small{color:#ccc}footer{text-align:center;padding:20px;color:#ffdf00}</style><header><span style="background:#d92132;color:white;padding:6px">● BRASILEIRÃO 2026</span><h1>CATIMBA</h1><b>DO CARLINHOS E TIBA</b></header><main><section><h2>Quem manja mais?</h2><p id="ranking"></p><small>3 pontos pelo placar exato; 1 pelo resultado correto.</small></section><h2>Bora palpitar!</h2><select id="round"><option>37</option><option>38</option></select><p><small>Confrontos iniciais a confirmar.</small></p><div id="games"></div><button id="save">Salvar palpites</button> <span id="status"></span><section><h2>Classificação</h2><p style="color:#5cda88">🏆 Libertadores</p><p style="color:#70baff">🌎 Sul-Americana</p><p style="color:#ff5966">🔥 Zona da degola</p><small>Classificação oficial ainda não conectada.</small></section><button id="export">Exportar histórico</button></main><footer>AQUI TEM FUTEBOL, RESENHA E CATIMBA!</footer><script>const fixtures={37:[['Atlético-MG','Corinthians'],['São Paulo','Remo']],38:[]};let data={};try{data=JSON.parse(localStorage.getItem('catimba')||'{}')}catch{};const $=id=>document.getElementById(id);function points(){let totals=[0,0];Object.values(data).forEach(v=>{if(v[4]==null||v[5]==null)return;[0,2].forEach((j,i)=>{if(v[j]==null||v[j+1]==null)return;totals[i]+=v[j]===v[4]&&v[j+1]===v[5]?3:Math.sign(v[j]-v[j+1])===Math.sign(v[4]-v[5])?1:0})});$('ranking').textContent='🎙 Carlinhos: '+totals[0]+' pts | 🎧 Tiba: '+totals[1]+' pts'}function render(){let r=$('round').value;$('games').replaceChildren();fixtures[r].forEach((g,i)=>{let k=r+'-'+i,v=data[k]??Array(6).fill(null),a=document.createElement('article');let h=document.createElement('h3');h.textContent=g.join(' × ');a.append(h);['Carlinhos','Tiba','Resultado final'].forEach((n,j)=>{let l=document.createElement('label');l.textContent=n;let s=document.createElement('span');[0,1].forEach(z=>{if(z)s.append(' × ');let x=document.createElement('input');x.type='number';x.min=0;x.max=99;x.value=v[j*2+z]??'';x.setAttribute('aria-label',n+' '+g[z]);x.oninput=()=>{v[j*2+z]=x.value===''?null:Math.max(0,Math.min(99,Math.floor(Number(x.value))));data[k]=v;points()};s.append(x)});l.append(s);a.append(l)});$('games').append(a)});if(!fixtures[r].length)$('games').textContent='Aguardando calendário oficial.';points()}$('round').onchange=render;$('save').onclick=()=>{try{localStorage.setItem('catimba',JSON.stringify(data));$('status').textContent='Salvo neste navegador.'}catch{$('status').textContent='Falha ao salvar.'}};$('export').onclick=()=>{let u=URL.createObjectURL(new Blob([JSON.stringify(data)],{type:'application/json'})),a=document.createElement('a');a.href=u;a.download='catimba.json';a.click();URL.revokeObjectURL(u)};render()</script></html>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>CATIMBA | Palpites e campinhos</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="campinho.css">
+  <link rel="stylesheet" href="match-pitches.css">
+</head>
+<body>
+  <header>
+    <p class="eyebrow">FUTEBOL, RESENHA E PALPITE</p>
+    <h1>CATIMBA</h1>
+    <b>DO CARLINHOS, TIBA E CONVIDADOS</b>
+  </header>
+  <main>
+    <p class="notice" id="storage-notice" hidden></p>
+    <section aria-labelledby="ranking-title">
+      <h2 id="ranking-title">Quem manja mais?</h2>
+      <div id="ranking" class="ranking"></div>
+      <p class="muted">3 pontos pelo placar exato; 1 pelo resultado correto. O palpite do campeão fica registrado à parte.</p>
+      <form id="guest-form" class="inline-form">
+        <label for="guest-name">Chama um convidado</label>
+        <input id="guest-name" placeholder="Nome do convidado" maxlength="40" required autocomplete="off">
+        <button type="submit">Adicionar convidado</button>
+      </form>
+      <p id="guest-status" role="status"></p>
+    </section>
+
+    <section aria-labelledby="games-title">
+      <h2 id="games-title">Bora palpitar!</h2>
+      <div class="filters">
+        <label>Campeonato<select id="competition">
+          <option value="brasileirao">Brasileirão Série A</option>
+          <option value="libertadores">Libertadores</option>
+          <option value="carioca">Campeonato Carioca</option>
+          <option value="paulista">Campeonato Paulista</option>
+        </select></label>
+        <label>Temporada<select id="season"><option>2026</option><option>2027</option></select></label>
+        <label>Rodada / fase<select id="round"></select></label>
+      </div>
+      <label class="search-label" for="search">Buscar um time ou jogo</label>
+      <input id="search" type="search" placeholder="Ex.: Palmeiras, Flamengo, Corinthians…" autocomplete="off">
+      <p id="fixture-info" class="muted"></p>
+      <p id="count" class="match-count" role="status"></p>
+      <div id="games"></div>
+      <section id="champion-section" class="champion-section" hidden>
+        <h3>Quem vai ser o campeão da Libertadores?</h3>
+        <p>Palmeiras ou Estudiantes? Registre o campeão de cada participante. Essa escolha é independente do placar da final.</p>
+        <div id="champion-picks"></div>
+      </section>
+      <section id="final-preview" hidden aria-labelledby="final-preview-title">
+        <h3 id="final-preview-title">A final no futebol de botão</h3>
+        <p>Palmeiras × Estudiantes · Prováveis escalações para 28/11/2026. Toque nos botões para ver o nome e a posição de cada jogador.</p>
+        <div id="match-pitches"></div>
+        <p class="muted">O desenho dos campinhos é ilustrativo. Murilo e Piquerez ainda eram dúvidas no treino do Palmeiras; Arthur, Bruno Fuchs, Andreas Pereira e Mauricio aparecem entre as alternativas. No Estudiantes, Fabricio Pérez disputa a vaga de Baltasar Rodríguez, suspenso; a equipe também pode usar cinco defensores.</p>
+        <p class="muted">Notícias dos clubes: <a href="https://palmeiras.com.br/noticias/palmeiras-faz-treino-tatico-e-segue-preparacao-para-final-com-o-estudiantes/" target="_blank" rel="noopener noreferrer">preparação do Palmeiras</a> · <a href="https://estudiantesdelaplata.com/en-montevideo-con-plantel-completo/" target="_blank" rel="noopener noreferrer">relacionados do Estudiantes</a>.</p>
+      </section>
+      <div class="save-bar"><button id="save" type="button">Salvar palpites</button><span id="status" role="status" aria-live="polite">Seus palpites são salvos automaticamente.</span></div>
+      <p class="muted">Os palpites, convidados e campinhos ficam neste navegador. Exporte uma cópia para guardar ou levar a outro aparelho.</p>
+    </section>
+
+    <div id="pitch"></div>
+
+    <section aria-labelledby="standings-title">
+      <h2 id="standings-title">Classificação do campeonato</h2>
+      <p id="standings-status" role="status">Consultando a classificação…</p>
+      <div id="standings" class="table-scroll"></div>
+      <button type="button" id="refresh-standings">Atualizar classificação</button>
+      <p class="muted" id="standings-source"></p>
+    </section>
+
+    <section aria-labelledby="how-title">
+      <h2 id="how-title">Como jogar no Catimba</h2>
+      <ol>
+        <li>Escolha o campeonato, a temporada e a rodada. A 38ª rodada já abre com os dez jogos.</li>
+        <li>Preencha os placares do Carlinhos, do Tiba e dos convidados. Zero é um placar válido; deixe em branco se ainda não decidiu.</li>
+        <li>Na Libertadores, dê também o palpite do campeão: Palmeiras ou Estudiantes.</li>
+        <li>Abra “Nossos campinhos”, escolha o participante e monte a escalação com onze nomes.</li>
+        <li>Depois do jogo, preencha o resultado para calcular os pontos. Exporte seu histórico para ter uma cópia.</li>
+      </ol>
+      <p class="muted">Na final, o placar vale pelos 90 minutos e acréscimos. A escolha do campeão considera também eventual prorrogação e pênaltis.</p>
+      <div class="backup-actions"><button type="button" id="export">Exportar histórico</button><label class="file-label" for="import">Restaurar histórico</label><input type="file" id="import" accept="application/json,.json"></div>
+      <p id="backup-status" role="status"></p>
+    </section>
+  </main>
+  <footer>AQUI TEM FUTEBOL, RESENHA E CATIMBA!</footer>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
