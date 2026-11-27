@@ -23,11 +23,6 @@ function nameKey(name) {
   return String(name).normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR');
 }
 
-function initials(name) {
-  return String(name).trim().split(/\s+/).filter(Boolean).slice(0, 2)
-    .map(part => Array.from(part)[0]).join('').toLocaleUpperCase('pt-BR');
-}
-
 function clubClass(name) {
   const value = nameKey(name);
   if (value.includes('palmeiras')) return ' match-pitches__team--palmeiras';
@@ -71,8 +66,8 @@ export function mountMatchPitches(container, teams = [], options = {}) {
   const canEdit = people.length > 0 && typeof options.onSave === 'function';
   const edits = new Map();
   const history = new Map();
-  const sections = [];
   let busy = false;
+  let closeExpandedView = async () => {};
   let selectedId = people.some(person => person.id === options.selectedParticipantId)
     ? options.selectedParticipantId : people[0]?.id;
 
@@ -92,7 +87,9 @@ export function mountMatchPitches(container, teams = [], options = {}) {
   toolbar.append(create('p', 'match-pitches__instructions', canEdit
     ? 'Toque em um jogador para substituir, editar ou mover. Cada participante tem seus próprios campinhos, salvos ao aplicar.'
     : 'Toque em um botão para ver o jogador e a posição.'));
-  wrapper.append(toolbar);
+  const board = create('div', 'match-pitches__board');
+  const panels = create('div', 'match-pitches__panels');
+  wrapper.append(toolbar, board, panels);
 
   function selectedPerson() { return people.find(person => person.id === selectedId); }
   function stateKey(teamName) { return JSON.stringify([selectedId || '', teamName]); }
@@ -307,7 +304,7 @@ export function mountMatchPitches(container, teams = [], options = {}) {
       choose.focus();
     }
 
-    const field = create('div', 'match-pitches__field');
+    const field = create('div', `match-pitches__half match-pitches__half--${teamIndex % 2 === 0 ? 'left' : 'right'}${clubClass(teamName)}`);
     field.setAttribute('role', 'group');
     field.setAttribute('aria-label', `Campo e posições de ${teamName}`);
     const groups = new Map([[3, { name: 'Ataque', players: [] }], [2, { name: 'Meio-campo', players: [] }], [1, { name: 'Defesa', players: [] }], [0, { name: 'Gol', players: [] }], [-1, { name: 'Posições a confirmar', players: [] }]]);
@@ -318,17 +315,21 @@ export function mountMatchPitches(container, teams = [], options = {}) {
     groups.forEach((group, rowIndex) => {
       if (!group.players.length) return;
       const row = create('div', `match-pitches__row match-pitches__row--${group.players.length}`);
+      row.style.setProperty('--column-x', `${[9, 31, 53, 73][rowIndex] ?? 53}%`);
       row.setAttribute('role', 'group'); row.setAttribute('aria-label', group.name);
       group.players.forEach(player => {
         const item = create('div', 'match-pitches__player');
         const button = create('button', 'match-pitches__button'); button.type = 'button';
         button.setAttribute('aria-label', `${player.name}, ${player.position}. ${canEdit ? 'Editar jogador' : 'Ver jogador'} de ${teamName}.`);
         button.setAttribute('aria-controls', canEdit ? editor.id : feedback.id);
-        const disk = create('span', 'match-pitches__disk', initials(player.name)); disk.setAttribute('aria-hidden', 'true');
+        const disk = create('span', `match-pitches__disk${rowIndex === 0 ? ' match-pitches__disk--goalkeeper' : ''}`); disk.setAttribute('aria-hidden', 'true');
         button.append(disk, create('span', 'match-pitches__player-name', player.name), create('span', 'match-pitches__position', player.position));
-        button.addEventListener('click', () => {
+        button.addEventListener('click', async () => {
           feedback.textContent = `${teamName} — ${player.name}: ${player.position}.`;
-          if (canEdit) openEditor(player.index);
+          if (canEdit) {
+            await closeExpandedView();
+            openEditor(player.index);
+          }
         });
         item.append(button); row.append(item);
       });
@@ -336,7 +337,7 @@ export function mountMatchPitches(container, teams = [], options = {}) {
       field.append(row);
     });
     if (!lineup.players.length) field.append(create('p', 'match-pitches__empty', 'Aguardando a escalação.'));
-    section.append(field, feedback, editor);
+    section.append(feedback, editor);
 
     const pool = squadPool(team, lineup);
     const available = pool.filter(player => player.available !== false);
@@ -354,16 +355,110 @@ export function mountMatchPitches(container, teams = [], options = {}) {
       bench.append(unavailableList);
     }
     section.append(bench);
-    return section;
+    return { section, field, lineup, team };
+  }
+
+  function renderBoard(rendered) {
+    const graphic = create('div', 'match-pitches__graphic');
+    const tools = create('div', 'match-pitches__graphic-tools');
+    const title = create('p', 'match-pitches__graphic-title', teams.map(team => team.name).join(' × '));
+    const fullscreen = create('button', 'match-pitches__action match-pitches__action--secondary', 'Ampliar campinho');
+    fullscreen.type = 'button';
+    closeExpandedView = async () => {
+      if (document.fullscreenElement === graphic) {
+        try { await document.exitFullscreen(); } catch {}
+      }
+      graphic.classList.remove('match-pitches__graphic--expanded');
+      graphic.removeAttribute('role');
+      graphic.removeAttribute('aria-modal');
+      graphic.removeAttribute('aria-label');
+      fullscreen.textContent = 'Ampliar campinho';
+    };
+    const expandOverlay = () => {
+      graphic.classList.add('match-pitches__graphic--expanded');
+      graphic.setAttribute('role', 'dialog');
+      graphic.setAttribute('aria-modal', 'true');
+      graphic.setAttribute('aria-label', 'Campinho ampliado');
+      fullscreen.textContent = 'Fechar ampliação';
+      fullscreen.focus();
+    };
+    fullscreen.addEventListener('click', async () => {
+      if (document.fullscreenElement === graphic || graphic.classList.contains('match-pitches__graphic--expanded')) {
+        await closeExpandedView();
+        fullscreen.focus();
+        return;
+      }
+      try {
+        if (typeof graphic.requestFullscreen !== 'function') { expandOverlay(); return; }
+        await graphic.requestFullscreen();
+        if (document.fullscreenElement === graphic) fullscreen.textContent = 'Fechar ampliação';
+        else expandOverlay();
+      } catch { expandOverlay(); }
+    });
+    graphic.addEventListener('fullscreenchange', () => {
+      fullscreen.textContent = document.fullscreenElement === graphic || graphic.classList.contains('match-pitches__graphic--expanded') ? 'Fechar ampliação' : 'Ampliar campinho';
+    });
+    graphic.addEventListener('keydown', async event => {
+      if (!graphic.classList.contains('match-pitches__graphic--expanded')) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        await closeExpandedView();
+        fullscreen.focus();
+      } else if (event.key === 'Tab') {
+        const focusable = [...graphic.querySelectorAll('button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),[tabindex="0"]')];
+        const first = focusable[0], last = focusable.at(-1);
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }
+    });
+    const toolsStatus = create('span', 'match-pitches__graphic-tools-status');
+    toolsStatus.setAttribute('role', 'status');
+    tools.append(title, fullscreen, toolsStatus);
+    const scroll = create('div', 'match-pitches__scroll');
+    scroll.tabIndex = 0;
+    scroll.setAttribute('role', 'region');
+    scroll.setAttribute('aria-label', 'Campinho horizontal. Role para os lados para ver os dois times.');
+    const canvas = create('div', 'match-pitches__canvas');
+    const banner = create('div', 'match-pitches__banner');
+    const teamHeader = (item, side) => {
+      const header = create('div', `match-pitches__club-header match-pitches__club-header--${side}`);
+      header.append(create('strong', 'match-pitches__club-name', item?.team.name || 'Time a confirmar'));
+      if (item) header.append(create('span', 'match-pitches__club-coach', `${item.lineup.formation} · Téc. ${item.team.coach || 'A confirmar'}`));
+      return header;
+    };
+    const meta = create('div', 'match-pitches__match-meta');
+    const personalized = rendered.some(item => isPersonalized(item.team, item.lineup));
+    meta.append(create('strong', 'match-pitches__badge', personalized ? 'NOSSAS ESCALAÇÕES' : 'ESCALAÇÕES PROVÁVEIS'));
+    meta.append(create('span', 'match-pitches__versus', '×'));
+    meta.append(create('span', 'match-pitches__competition', options.competitionLabel || 'FUTEBOL DE BOTÃO · CATIMBA'));
+    if (options.kickoffLabel) meta.append(create('span', 'match-pitches__kickoff', options.kickoffLabel));
+    if (personalized) meta.append(create('span', 'match-pitches__owner', selectedPerson()?.name || 'Escalação personalizada'));
+    banner.append(teamHeader(rendered[0], 'left'), meta, teamHeader(rendered[1], 'right'));
+    const field = create('div', 'match-pitches__field');
+    field.setAttribute('role', 'group');
+    field.setAttribute('aria-label', `Campo de ${teams.map(team => team.name).join(' contra ')}`);
+    let largestLine = 1;
+    rendered.forEach(item => {
+      for (let row = 0; row < 4; row++) largestLine = Math.max(largestLine, item.lineup.players.filter(player => player.row === row).length);
+    });
+    field.style.setProperty('--pitch-height', `${Math.max(460, largestLine * 94 + 30)}px`);
+    for (const side of ['left', 'right']) {
+      field.append(create('div', `match-pitches__penalty match-pitches__penalty--${side}`), create('div', `match-pitches__six-yard match-pitches__six-yard--${side}`), create('div', `match-pitches__goal match-pitches__goal--${side}`));
+    }
+    const mark = create('div', 'match-pitches__center-brand');
+    mark.setAttribute('aria-label', 'Catimba do Carlinhos e Tiba');
+    mark.append(create('span', 'match-pitches__brand-overline', 'O PROGRAMA'), create('strong', 'match-pitches__brand-name', 'CATIMBA'), create('span', 'match-pitches__brand-tagline', 'do Carlinhos e Tiba'));
+    field.append(mark, ...rendered.map(item => item.field));
+    canvas.append(banner, field);
+    scroll.append(canvas);
+    graphic.append(tools, scroll);
+    board.replaceChildren(graphic);
   }
 
   function renderSections(update) {
-    sections.forEach(section => section.remove());
-    sections.length = 0;
-    teams.forEach((team, index) => {
-      const section = renderTeam(team, index, update);
-      sections.push(section); wrapper.append(section);
-    });
+    const rendered = teams.map((team, index) => renderTeam(team, index, update));
+    panels.replaceChildren(...rendered.map(item => item.section));
+    renderBoard(rendered);
   }
 
   participantSelect.addEventListener('change', () => {
