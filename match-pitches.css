@@ -94,3 +94,14 @@
 @media(max-width:700px){.match-pitches__panels{grid-template-columns:minmax(0,1fr)}.match-pitches__scroll{padding-left:10px;padding-right:10px}.match-pitches__graphic-tools{align-items:flex-start}.match-pitches__graphic-tools .match-pitches__action{white-space:nowrap}.match-pitches__graphic-title{min-width:100%}}
 @media(prefers-reduced-motion:reduce){.match-pitches__disk{transition:none}}
 .match-pitches__player-name{font-family:Impact,'Arial Narrow',Arial,sans-serif;font-weight:400;letter-spacing:.035em;overflow-wrap:normal}
+.match-pitches__half{width:100%;left:0;right:0;z-index:3}
+.match-pitches__half--left,.match-pitches__half--right{left:0;right:0}
+.match-pitches__player--free{position:absolute;left:clamp(46px,var(--player-x),calc(100% - 46px));top:clamp(var(--player-half-height,46px),var(--player-y),calc(100% - var(--player-half-height,46px)));width:92px;transform:translate(-50%,-50%)}
+.match-pitches__button{touch-action:none;user-select:none;cursor:grab}
+.match-pitches--dragging,.match-pitches--dragging .match-pitches__button{user-select:none;cursor:grabbing}
+.match-pitches__player--dragging{z-index:20;filter:drop-shadow(0 3px 4px #0008)}
+.match-pitches__half--dragging{z-index:6}
+.match-pitches__graphic-tools-status,.match-pitches__graphic-tools-status:empty{display:block;min-height:1.2em;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.match-pitches__banner{height:156px;min-height:156px;box-sizing:border-box}
+.match-pitches__club-coach{height:2.6em;min-height:2.6em;overflow:hidden}
+.match-pitches__owner{display:block;width:100%;height:1.2em;min-height:1.2em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

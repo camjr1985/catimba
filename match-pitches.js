@@ -31,7 +31,8 @@ function clubClass(name) {
 }
 
 function clonePlayers(players) {
-  return players.map(player => ({ name: player.name, position: player.position, row: player.row }));
+  return players.map(player => ({ name: player.name, position: player.position, row: player.row,
+    ...(Number.isFinite(player.x) && Number.isFinite(player.y) ? { x: player.x, y: player.y } : {}) }));
 }
 
 function cloneLineup(lineup) {
@@ -45,6 +46,9 @@ function validEdit(value, playerCount) {
     if (!player || typeof player.name !== 'string' || !player.name.trim()
       || typeof player.position !== 'string' || !player.position.trim()
       || !Number.isInteger(player.row) || player.row < 0 || player.row > 3) return false;
+    if ((player.x !== undefined || player.y !== undefined)
+      && (!Number.isFinite(player.x) || !Number.isFinite(player.y)
+        || player.x < 0 || player.x > 100 || player.y < 0 || player.y > 100)) return false;
     const key = nameKey(player.name);
     if (names.has(key)) return false;
     names.add(key);
@@ -53,6 +57,7 @@ function validEdit(value, playerCount) {
 }
 
 function customFormation(players) {
+  if (players.some(player => Number.isFinite(player.x) && Number.isFinite(player.y))) return 'Personalizada (posições livres)';
   const counts = [0, 0, 0, 0];
   players.forEach(player => { counts[player.row]++; });
   return `Personalizada (${counts.slice(1).join('-')}${counts[0] === 1 ? '' : `; ${counts[0]} no gol`})`;
@@ -67,6 +72,9 @@ export function mountMatchPitches(container, teams = [], options = {}) {
   const edits = new Map();
   const history = new Map();
   let busy = false;
+  let expandedView = false;
+  let suppressPlayerClickUntil = 0;
+  let boardMessage = '';
   let closeExpandedView = async () => {};
   let selectedId = people.some(person => person.id === options.selectedParticipantId)
     ? options.selectedParticipantId : people[0]?.id;
@@ -85,11 +93,17 @@ export function mountMatchPitches(container, teams = [], options = {}) {
   participantLabel.append(participantSelect);
   if (people.length) toolbar.append(participantLabel);
   toolbar.append(create('p', 'match-pitches__instructions', canEdit
-    ? 'Toque em um jogador para substituir, editar ou mover. Cada participante tem seus próprios campinhos, salvos ao aplicar.'
+    ? 'Segure e arraste um jogador para mover no campo; a posição é salva ao soltar. Clique ou toque sem arrastar para substituir e editar. Cada participante tem seus próprios campinhos.'
     : 'Toque em um botão para ver o jogador e a posição.'));
   const board = create('div', 'match-pitches__board');
   const panels = create('div', 'match-pitches__panels');
   wrapper.append(toolbar, board, panels);
+  wrapper.addEventListener('click', event => {
+    if (event.detail !== 0 && performance.now() < suppressPlayerClickUntil
+      && event.target.closest('.match-pitches__button')) {
+      event.preventDefault(); event.stopImmediatePropagation();
+    }
+  }, true);
 
   function selectedPerson() { return people.find(person => person.id === selectedId); }
   function stateKey(teamName) { return JSON.stringify([selectedId || '', teamName]); }
@@ -128,6 +142,7 @@ export function mountMatchPitches(container, teams = [], options = {}) {
     participantSelect.disabled = true;
     wrapper.querySelectorAll('button').forEach(button => { button.disabled = true; });
     feedback.textContent = 'Salvando campinho…';
+    if (mode === 'drag') board.querySelector('.match-pitches__graphic-tools-status').textContent = 'Salvando posição…';
     try {
       const saved = await options.onSave(participantId, team.name, cloneLineup(candidate));
       if (saved === false) throw new Error('Persistence failed');
@@ -136,10 +151,18 @@ export function mountMatchPitches(container, teams = [], options = {}) {
       if (mode === 'undo') changes.pop();
       else { changes.push(previous); if (changes.length > 20) changes.shift(); }
       edits.set(key, cloneLineup(candidate));
+      boardMessage = mode === 'drag' ? 'Posição salva para ' + selectedPerson().name + '.' : '';
       renderSections({ teamName: team.name, message: mode === 'undo' ? 'Alteração desfeita e salva.' : 'Campinho salvo para ' + selectedPerson().name + '.' });
       return true;
     } catch {
-      feedback.textContent = 'Não foi possível salvar. Suas alterações no formulário continuam disponíveis; tente aplicar novamente.';
+      feedback.textContent = mode === 'drag'
+        ? 'Não foi possível salvar a posição. Arraste novamente para tentar salvar.'
+        : 'Não foi possível salvar. Suas alterações no formulário continuam disponíveis; tente aplicar novamente.';
+      if (mode === 'drag') {
+        boardMessage = feedback.textContent;
+        edits.set(key, cloneLineup(candidate));
+        renderSections({ teamName: team.name, message: boardMessage });
+      }
       return false;
     } finally {
       busy = false;
@@ -275,7 +298,9 @@ export function mountMatchPitches(container, teams = [], options = {}) {
           formStatus.textContent = `${name} já está entre os titulares. Escolha outro jogador.`; return;
         }
         const next = clonePlayers(lineup.players);
-        next[playerIndex] = { name, position, row: Number(rowSelect.value) };
+        const row = Number(rowSelect.value);
+        next[playerIndex] = { ...next[playerIndex], name, position, row };
+        if (row !== player.row) { delete next[playerIndex].x; delete next[playerIndex].y; }
         void persist(team, { players: next, formation: customFormation(next) }, formStatus);
       });
 
@@ -295,8 +320,10 @@ export function mountMatchPitches(container, teams = [], options = {}) {
         const otherIndex = Number(swapSelect.value);
         const next = clonePlayers(lineup.players);
         const other = next[otherIndex];
-        next[otherIndex] = { ...next[playerIndex], row: other.row };
-        next[playerIndex] = { ...other, row: player.row };
+        const playerPlace = visualPosition(teamIndex, playerIndex, lineup);
+        const otherPlace = visualPosition(teamIndex, otherIndex, lineup);
+        next[otherIndex] = { ...next[playerIndex], row: other.row, ...otherPlace };
+        next[playerIndex] = { ...other, row: player.row, ...playerPlace };
         void persist(team, { players: next, formation: customFormation(next) }, formStatus);
       });
       const swapHelp = create('p', 'match-pitches__editor-help', 'A troca também altera a ordem dos botões quando os dois jogadores estão no mesmo setor.');
@@ -314,11 +341,12 @@ export function mountMatchPitches(container, teams = [], options = {}) {
     });
     groups.forEach((group, rowIndex) => {
       if (!group.players.length) return;
-      const row = create('div', `match-pitches__row match-pitches__row--${group.players.length}`);
-      row.style.setProperty('--column-x', `${[9, 31, 53, 73][rowIndex] ?? 53}%`);
-      row.setAttribute('role', 'group'); row.setAttribute('aria-label', group.name);
       group.players.forEach(player => {
-        const item = create('div', 'match-pitches__player');
+        const item = create('div', 'match-pitches__player match-pitches__player--free');
+        item.dataset.teamIndex = String(teamIndex);
+        item.dataset.playerIndex = String(player.index);
+        const place = defaultPosition(teamIndex, player.index, lineup);
+        placePlayer(item, place.x, place.y);
         const button = create('button', 'match-pitches__button'); button.type = 'button';
         button.setAttribute('aria-label', `${player.name}, ${player.position}. ${canEdit ? 'Editar jogador' : 'Ver jogador'} de ${teamName}.`);
         button.setAttribute('aria-controls', canEdit ? editor.id : feedback.id);
@@ -331,10 +359,9 @@ export function mountMatchPitches(container, teams = [], options = {}) {
             openEditor(player.index);
           }
         });
-        item.append(button); row.append(item);
+        if (canEdit) enableDrag(button, item, team, teamIndex, player.index, lineup, feedback);
+        item.append(button); field.append(item);
       });
-      if (rowIndex === -1) row.classList.add('match-pitches__row--unknown');
-      field.append(row);
     });
     if (!lineup.players.length) field.append(create('p', 'match-pitches__empty', 'Aguardando a escalação.'));
     section.append(feedback, editor);
@@ -358,6 +385,86 @@ export function mountMatchPitches(container, teams = [], options = {}) {
     return { section, field, lineup, team };
   }
 
+  function defaultPosition(teamIndex, playerIndex, lineup) {
+    const player = lineup.players[playerIndex];
+    if (Number.isFinite(player.x) && Number.isFinite(player.y)) return { x: player.x, y: player.y };
+    const peers = lineup.players.map((person, index) => ({ person, index })).filter(({person}) => person.row === player.row);
+    const order = peers.findIndex(({index}) => index === playerIndex);
+    const distance = ([9,31,53,73][player.row] ?? 53) / 2;
+    return { x: teamIndex % 2 === 0 ? distance : 100 - distance, y: 4 + 92 * (order + .5) / peers.length };
+  }
+
+  function placePlayer(item, x, y) {
+    item.style.setProperty('--player-x', `${x}%`);
+    item.style.setProperty('--player-y', `${y}%`);
+  }
+
+  function fieldPosition(item) {
+    const pitch = item.closest('.match-pitches__field');
+    const bounds = pitch.getBoundingClientRect(), box = item.getBoundingClientRect();
+    return { x: 100 * (box.left + box.width / 2 - bounds.left - pitch.clientLeft) / pitch.clientWidth,
+      y: 100 * (box.top + box.height / 2 - bounds.top - pitch.clientTop) / pitch.clientHeight };
+  }
+
+  function visualPosition(teamIndex, playerIndex, lineup) {
+    const item = board.querySelector(`[data-team-index="${teamIndex}"][data-player-index="${playerIndex}"]`);
+    return item ? fieldPosition(item) : defaultPosition(teamIndex, playerIndex, lineup);
+  }
+
+  function enableDrag(button, item, team, teamIndex, playerIndex, lineup, feedback) {
+    let drag = null;
+    button.draggable = false;
+    button.addEventListener('dragstart', event => event.preventDefault());
+    button.addEventListener('pointerdown', event => {
+      if (busy || drag || !event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
+      const pitch = item.closest('.match-pitches__field');
+      const box = item.getBoundingClientRect();
+      drag = { pointerId: event.pointerId, pitch, startX: event.clientX, startY: event.clientY,
+        participantId: selectedId,
+        centerX: box.left + box.width / 2, centerY: box.top + box.height / 2,
+        originalX: item.style.getPropertyValue('--player-x'), originalY: item.style.getPropertyValue('--player-y'),
+        moved: false, next: null };
+      try { button.setPointerCapture(event.pointerId); } catch { drag = null; }
+    });
+    button.addEventListener('pointermove', event => {
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      if (!drag.moved && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 5) return;
+      drag.moved = true;
+      event.preventDefault();
+      item.classList.add('match-pitches__player--dragging');
+      item.parentElement.classList.add('match-pitches__half--dragging');
+      wrapper.classList.add('match-pitches--dragging');
+      const bounds = drag.pitch.getBoundingClientRect(), box = item.getBoundingClientRect();
+      const width = drag.pitch.clientWidth, height = drag.pitch.clientHeight;
+      const left = bounds.left + drag.pitch.clientLeft, top = bounds.top + drag.pitch.clientTop;
+      const x = Math.max(box.width / 2, Math.min(width - box.width / 2, drag.centerX + event.clientX - drag.startX - left));
+      const y = Math.max(box.height / 2, Math.min(height - box.height / 2, drag.centerY + event.clientY - drag.startY - top));
+      drag.next = { x: Number((100 * x / width).toFixed(4)), y: Number((100 * y / height).toFixed(4)) };
+      placePlayer(item, drag.next.x, drag.next.y);
+    });
+    const finish = (event, cancelled) => {
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      const finished = drag; drag = null;
+      item.classList.remove('match-pitches__player--dragging');
+      item.parentElement.classList.remove('match-pitches__half--dragging');
+      wrapper.classList.remove('match-pitches--dragging');
+      try { if (button.hasPointerCapture(event.pointerId)) button.releasePointerCapture(event.pointerId); } catch {}
+      if (!finished.moved) return;
+      suppressPlayerClickUntil = performance.now() + 450;
+      if (cancelled || selectedId !== finished.participantId || !finished.next) {
+        item.style.setProperty('--player-x', finished.originalX);
+        item.style.setProperty('--player-y', finished.originalY);
+        return;
+      }
+      const next = clonePlayers(lineup.players);
+      next[playerIndex] = { ...next[playerIndex], ...finished.next };
+      void persist(team, { players: next, formation: customFormation(next) }, feedback, 'drag');
+    };
+    button.addEventListener('pointerup', event => finish(event, false));
+    button.addEventListener('pointercancel', event => finish(event, true));
+    button.addEventListener('lostpointercapture', event => finish(event, true));
+  }
+
   function renderBoard(rendered) {
     const graphic = create('div', 'match-pitches__graphic');
     const tools = create('div', 'match-pitches__graphic-tools');
@@ -365,6 +472,7 @@ export function mountMatchPitches(container, teams = [], options = {}) {
     const fullscreen = create('button', 'match-pitches__action match-pitches__action--secondary', 'Ampliar campinho');
     fullscreen.type = 'button';
     closeExpandedView = async () => {
+      expandedView = false;
       if (document.fullscreenElement === graphic) {
         try { await document.exitFullscreen(); } catch {}
       }
@@ -375,6 +483,7 @@ export function mountMatchPitches(container, teams = [], options = {}) {
       fullscreen.textContent = 'Ampliar campinho';
     };
     const expandOverlay = () => {
+      expandedView = true;
       graphic.classList.add('match-pitches__graphic--expanded');
       graphic.setAttribute('role', 'dialog');
       graphic.setAttribute('aria-modal', 'true');
@@ -391,11 +500,13 @@ export function mountMatchPitches(container, teams = [], options = {}) {
       try {
         if (typeof graphic.requestFullscreen !== 'function') { expandOverlay(); return; }
         await graphic.requestFullscreen();
-        if (document.fullscreenElement === graphic) fullscreen.textContent = 'Fechar ampliação';
+        if (document.fullscreenElement === graphic) { expandedView = true; fullscreen.textContent = 'Fechar ampliação'; }
         else expandOverlay();
       } catch { expandOverlay(); }
     });
     graphic.addEventListener('fullscreenchange', () => {
+      if (!graphic.isConnected) return;
+      expandedView = document.fullscreenElement === graphic || graphic.classList.contains('match-pitches__graphic--expanded');
       fullscreen.textContent = document.fullscreenElement === graphic || graphic.classList.contains('match-pitches__graphic--expanded') ? 'Fechar ampliação' : 'Ampliar campinho';
     });
     graphic.addEventListener('keydown', async event => {
@@ -413,6 +524,7 @@ export function mountMatchPitches(container, teams = [], options = {}) {
     });
     const toolsStatus = create('span', 'match-pitches__graphic-tools-status');
     toolsStatus.setAttribute('role', 'status');
+    toolsStatus.textContent = boardMessage;
     tools.append(title, fullscreen, toolsStatus);
     const scroll = create('div', 'match-pitches__scroll');
     scroll.tabIndex = 0;
@@ -432,7 +544,9 @@ export function mountMatchPitches(container, teams = [], options = {}) {
     meta.append(create('span', 'match-pitches__versus', '×'));
     meta.append(create('span', 'match-pitches__competition', options.competitionLabel || 'FUTEBOL DE BOTÃO · CATIMBA'));
     if (options.kickoffLabel) meta.append(create('span', 'match-pitches__kickoff', options.kickoffLabel));
-    if (personalized) meta.append(create('span', 'match-pitches__owner', selectedPerson()?.name || 'Escalação personalizada'));
+    const owner = create('span', 'match-pitches__owner', selectedPerson()?.name || '\u00a0');
+    owner.title = selectedPerson()?.name || '';
+    meta.append(owner);
     banner.append(teamHeader(rendered[0], 'left'), meta, teamHeader(rendered[1], 'right'));
     const field = create('div', 'match-pitches__field');
     field.setAttribute('role', 'group');
@@ -453,6 +567,10 @@ export function mountMatchPitches(container, teams = [], options = {}) {
     scroll.append(canvas);
     graphic.append(tools, scroll);
     board.replaceChildren(graphic);
+    graphic.querySelectorAll('.match-pitches__player').forEach(item => {
+      requestAnimationFrame(() => { if (item.isConnected) item.style.setProperty('--player-half-height', `${item.offsetHeight / 2}px`); });
+    });
+    if (expandedView) expandOverlay();
   }
 
   function renderSections(update) {
@@ -464,6 +582,8 @@ export function mountMatchPitches(container, teams = [], options = {}) {
   participantSelect.addEventListener('change', () => {
     if (busy) return;
     selectedId = participantSelect.value;
+    boardMessage = '';
+    wrapper.classList.remove('match-pitches--dragging');
     renderSections();
   });
   container.replaceChildren(wrapper);

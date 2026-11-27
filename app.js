@@ -1,5 +1,5 @@
 import { mountPitch } from './campinho.js';
-import { mountMatchPitches } from './match-pitches.js';
+import { mountMatchPitches } from './match-pitches.js?v=20261127-arraste';
 import { finalLineups } from './lineups.js';
 
 const $ = id => document.getElementById(id);
@@ -60,6 +60,11 @@ function validateState(value) {
       for(const [team,lineup] of Object.entries(teams)) {
         if(!['Palmeiras','Estudiantes'].includes(team)||!isRecord(lineup)||typeof lineup.formation!=='string'||lineup.formation.length>50||!Array.isArray(lineup.players)||lineup.players.length!==11)return false;
         if(lineup.players.some(player=>!isRecord(player)||typeof player.name!=='string'||!player.name.trim()||player.name.length>100||typeof player.position!=='string'||player.position.length>100||!Number.isInteger(player.row)||player.row<0||player.row>3))return false;
+        for(const player of lineup.players) {
+          const hasX=Object.hasOwn(player,'x'),hasY=Object.hasOwn(player,'y');
+          if(hasX!==hasY)return false;
+          if(hasX&&(!Number.isFinite(player.x)||!Number.isFinite(player.y)||player.x<0||player.x>100||player.y<0||player.y>100))return false;
+        }
         if(new Set(lineup.players.map(player=>normal(player.name))).size!==11)return false;
       }
     }
