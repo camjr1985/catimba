@@ -14,6 +14,25 @@ const METRICS=[
 const text=value=>typeof value==='string'?value.slice(0,500):'';
 const score=value=>Number.isInteger(value)&&value>=0&&value<=999?String(value):'—';
 const number=value=>typeof value==='number'&&Number.isFinite(value)&&value>=0?value:null;
+const CLUB_CRESTS={
+  Palmeiras:'https://a.espncdn.com/i/teamlogos/soccer/500/2029.png',
+  Estudiantes:'https://a.espncdn.com/i/teamlogos/soccer/500/8.png'
+};
+
+function teamIdentity(make,name) {
+  const identity=make('div','live-match__identity');
+  const crestUrl=CLUB_CRESTS[name.textContent];
+  if(crestUrl){
+    const crest=make('img','live-match__crest');
+    crest.src=crestUrl;crest.alt=`Escudo do ${name.textContent}`;
+    crest.width=76;crest.height=76;crest.decoding='async';
+    crest.referrerPolicy='no-referrer';
+    crest.addEventListener('error',()=>{crest.hidden=true;},{once:true});
+    identity.append(crest);
+  }
+  identity.append(name);
+  return identity;
+}
 
 function create(document,tag,className,value) {
   const node=document.createElement(tag);
@@ -87,7 +106,7 @@ export function mountLiveMatch(container,{fixture={},onRefresh}={}) {
   const away=make('div','live-match__team live-match__team--away');
   const awayName=make('strong','live-match__team-name',text(fixture.away)||'Estudiantes');
   const awayScore=make('span','live-match__score','—');
-  home.append(homeName,homeScore);away.append(awayName,awayScore);
+  home.append(teamIdentity(make,homeName),homeScore);away.append(teamIdentity(make,awayName),awayScore);
   scoreboard.append(home,make('span','live-match__versus','×'),away);
   const shootout=make('p','live-match__shootout');shootout.hidden=true;
   const schedule=make('p','live-match__schedule');
