@@ -8,6 +8,8 @@ import { startAutoRefresh } from './auto-refresh.js?v=20261128-automatico';
 import { projectZones } from './standings-zones.js?v=20261128-tabela';
 import { projectStandings } from './standings-projection.js?v=20261128-tabela';
 import { enhanceScoreInput } from './score-input.js?v=20261128-digitacao';
+import { readSavedSources,recoverMissing,buildHistoryRows } from './history-data.js?v=20261128-historico';
+import { mountSavedHistory } from './saved-history.js?v=20261128-historico';
 
 const $ = id => document.getElementById(id);
 const KEY = 'catimba:v2';
@@ -124,6 +126,26 @@ function loadState() {
   }
 }
 let state=loadState();
+let historySources=[],historyWarnings=[];
+function loadSavedHistory({recover=true}={}) {
+  try {
+    const loaded=readSavedSources(localStorage);
+    historySources=loaded.sources;historyWarnings=loaded.warnings;
+    if(!recover)return;
+    const recovered=recoverMissing(state,historySources);
+    if(!recovered.changed)return;
+    if(!validateState(recovered.state)){historyWarnings.push('Há registros anteriores que continuam disponíveis no histórico para conferência.');return;}
+    const previous=JSON.stringify(state),candidate=recovered.state;
+    try {
+      localStorage.setItem(`catimba:before-recovery:${Date.now()}`,previous);
+      candidate.updatedAt=new Date().toISOString();
+      localStorage.setItem(KEY,JSON.stringify(candidate));
+      state=candidate;
+      $('history-recovery-status').textContent=recovered.recoveredCount?`${recovered.recoveredCount} registro${recovered.recoveredCount===1?' anterior voltou':'s anteriores voltaram'} ao preenchimento. A versão anterior ficou guardada neste navegador.`:'Histórico anterior conferido. Uma cópia da versão anterior ficou guardada neste navegador.';
+    } catch {historyWarnings.push('Os registros anteriores aparecem no quadro abaixo, mas não foi possível salvar a recuperação no navegador.');}
+  } catch {historyWarnings.push('Não foi possível consultar todas as cópias locais agora.');}
+}
+loadSavedHistory();
 let titlePicksView=null,officialResults={},latestStandingsTables=[];
 let resultsRequest=0;
 let autoRefreshController=null,officialViewsPending=false;
@@ -142,7 +164,7 @@ function refreshScorePreviews() {
     // The new values are saved immediately; previews wait until focus leaves scores.
     if(document.activeElement?.classList.contains('catimba-score-input'))return;
     if(officialViewsPending)applyOfficialViews();
-    else{renderRanking();renderBoardResults();}
+    else{renderRanking();renderBoardResults();renderSavedHistory();}
     if(latestStandingsTables.length&&(standingsRenderPending||$('standings-view').value!=='real'))renderStandings(latestStandingsTables);
   },120);
 }
@@ -225,7 +247,10 @@ function renderGames() {
     const article=element('article');article.dataset.matchId=game.id;article.append(element('h3',`${game.home} × ${game.away}`));
     article.append(element('p',game.kickoff?`${dateLabel(game.kickoff,'America/Sao_Paulo')} (Brasília) · ${dateLabel(game.kickoff,'Europe/Lisbon')} (Lisboa) · ${game.stadium}`:game.stadium,'match-meta'));
     const actual=element('div',undefined,'official-result');actual.dataset.officialMatch=game.id;article.append(actual);
-    state.participants.forEach(p=>article.append(scoreRow(game,p)));$('games').append(article);
+    state.participants.forEach(p=>article.append(scoreRow(game,p)));
+    const previous=state.results[game.id];
+    if(validPair(previous)&&previous.some(value=>value!==null))article.append(element('p',`Resultado informado anteriormente: ${previous[0]??'—'} × ${previous[1]??'—'}`,'previous-result'));
+    $('games').append(article);
   }
   if(!games.length) $('games').append(element('p',all.length?'Nenhum jogo encontrado. Tente outro nome de time.':'Assim que os confrontos forem conferidos, os campos para palpitar aparecerão aqui.','empty'));
   renderChampions();renderRanking();renderOfficialBlocks();
@@ -294,6 +319,17 @@ function renderComparisonPeople() {
   $('comparison-person').replaceChildren(...state.participants.map(person=>{const option=element('option',person.name);option.value=person.id;return option;}));
   $('comparison-person').value=state.participants.some(person=>person.id===selected)?selected:state.participants[0].id;
 }
+function renderSavedHistory() {
+  const rows=buildHistoryRows(fixtures,state,historySources);
+  mountSavedHistory($('saved-history'),{rows,participants:state.participants,officialResults,onOpen:id=>{
+    const game=fixtures.find(item=>item.id===id);if(!game)return;
+    $('competition').value=game.competition;$('season').value=game.season;
+    $('search').value='';renderRounds();$('round').value=game.round;renderGames();
+    const target=[...$('games').querySelectorAll('article')].find(item=>item.dataset.matchId===id);
+    target?.scrollIntoView({block:'center',behavior:'smooth'});
+  }});
+  $('history-warnings').textContent=historyWarnings.join(' ');
+}
 function renderOfficialBlocks() {
   for(const target of document.querySelectorAll('[data-official-match]')) {
     const game=fixtures.find(game=>game.id===target.dataset.officialMatch),actual=officialResults[game?.id];
@@ -337,7 +373,7 @@ async function refreshOfficialResults({force=false}={}) {
 function applyOfficialViews() {
   if(document.activeElement?.classList.contains('catimba-score-input')){officialViewsPending=true;return;}
   officialViewsPending=false;
-  renderOfficialBlocks();renderBoardResults();renderRanking();titlePicksView?.updateOfficialResults(boardFinals());
+  renderOfficialBlocks();renderBoardResults();renderRanking();renderSavedHistory();titlePicksView?.updateOfficialResults(boardFinals());
   titlePicksView?.updateChampions([{key:'libertadores:2026',champion:officialResults['libertadores:2026:final:palmeiras-estudiantes']?.winner||null},{key:'copa-brasil:2026',champion:officialResults['copa-brasil:2026:final:gremio-palmeiras']?.winner||null}]);
   requestStandingsRender();
 }
@@ -352,7 +388,7 @@ $('guest-form').onsubmit=event=>{
   event.preventDefault();const name=$('guest-name').value.trim().replace(/\s+/g,' ');
   if(!name||state.participants.some(p=>normal(p.name)===normal(name))) { $('guest-status').textContent='Digite um nome diferente dos participantes já cadastrados.';return; }
   if(state.participants.length>=100) {$('guest-status').textContent='Limite de 100 participantes atingido.';return;}
-  state.participants.push({id:`guest-${crypto.randomUUID()}`,name});const saved=persist();$('guest-name').value='';$('guest-status').textContent=saved?`${name} entrou no Catimba. Já pode palpitar e montar seu campinho.`:`${name} foi adicionado, mas não foi possível salvar. Exporte uma cópia.`;renderGames();renderPitch();renderMatchPitches();renderTitlePicks();renderComparisonPeople();if(latestStandingsTables.length)renderStandings(latestStandingsTables);
+  state.participants.push({id:`guest-${crypto.randomUUID()}`,name});const saved=persist();$('guest-name').value='';$('guest-status').textContent=saved?`${name} entrou no Catimba. Já pode palpitar e montar seu campinho.`:`${name} foi adicionado, mas não foi possível salvar. Exporte uma cópia.`;renderGames();renderPitch();renderMatchPitches();renderTitlePicks();renderComparisonPeople();renderSavedHistory();if(latestStandingsTables.length)renderStandings(latestStandingsTables);
 };
 $('search').oninput=renderGames;$('round').onchange=()=>{renderGames();refreshOfficialResults();};
 $('competition').onchange=$('season').onchange=()=>{renderRounds();renderGames();refreshOfficialResults();};
@@ -370,7 +406,7 @@ $('import').onchange=async()=>{
     imported.teamLineups??={};
     imported.tournamentChampions??={};
     localStorage.setItem(`catimba:before-import:${Date.now()}`,JSON.stringify(state));
-    localStorage.setItem(KEY,JSON.stringify(imported));state=imported;syncLegacyFixture();$('backup-status').textContent='Histórico restaurado. A versão anterior ficou guardada neste navegador.';renderRounds();renderGames();renderPitch();renderMatchPitches();renderTitlePicks();renderComparisonPeople();if(latestStandingsTables.length)renderStandings(latestStandingsTables);
+    localStorage.setItem(KEY,JSON.stringify(imported));state=imported;loadSavedHistory({recover:false});syncLegacyFixture();$('backup-status').textContent='Histórico restaurado. A versão anterior ficou guardada neste navegador.';renderRounds();renderGames();renderPitch();renderMatchPitches();renderTitlePicks();renderComparisonPeople();renderSavedHistory();if(latestStandingsTables.length)renderStandings(latestStandingsTables);
   } catch { $('backup-status').textContent='Não foi possível restaurar. Use um arquivo de histórico do Catimba exportado nesta versão. Seus palpites atuais foram mantidos.'; }
   $('import').value='';
 };
@@ -467,5 +503,5 @@ $('board-round').onchange=()=>{renderBoardResults();refreshOfficialResults();};
 $('standings-view').onchange=()=>{if(latestStandingsTables.length)renderStandings(latestStandingsTables);else $('comparison-person-label').hidden=$('standings-view').value==='real';};
 $('comparison-person').onchange=()=>{if(latestStandingsTables.length)renderStandings(latestStandingsTables);};
 renderOriginalLineups();renderMatchPitches();
-renderComparisonPeople();renderRounds();renderGames();renderPitch();renderTitlePicks();renderBoardResults();
+renderComparisonPeople();renderRounds();renderGames();renderPitch();renderTitlePicks();renderBoardResults();renderSavedHistory();
 autoRefreshController=startAutoRefresh({refreshResults:refreshOfficialResults,refreshStandings});
