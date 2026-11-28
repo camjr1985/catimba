@@ -1,3 +1,5 @@
+import { enhanceScoreInput } from './score-input.js?v=20261128-digitacao';
+
 let titlePicksInstance = 0;
 
 function create(tag, className, text) {
@@ -40,7 +42,7 @@ function safeSource(value) {
  * completed, regulationConfirmed and a complete numeric officialScore.
  */
 export function mountTitlePicks(container, {
-  season = '2026', participants = [], competitions = [], finals = [], onPick, onScore
+  season = '2026', participants = [], competitions = [], finals = [], onPick, onScore,onCommit
 } = {}) {
   const instance = ++titlePicksInstance;
   const people = participants.filter(person => person && typeof person.id === 'string' && typeof person.name === 'string');
@@ -59,7 +61,7 @@ export function mountTitlePicks(container, {
   heading.id = `title-picks-heading-${instance}`;
   wrapper.setAttribute('aria-labelledby', heading.id);
   wrapper.append(heading,
-    create('p', 'title-picks__intro', 'Escolha os campeões e os placares das finais. Os resultados reais aparecem separados abaixo.'));
+    create('p', 'title-picks__intro', 'Escolha os campeões e os placares das finais. Use Enter para avançar de placar. Os palpites são salvos automaticamente.'));
 
   function showComparison(node, text = '', correct = false) {
     if (!node) return;
@@ -150,8 +152,7 @@ export function mountTitlePicks(container, {
   function setScore(participantId, fixtureId, index, value) {
     const field = scores.get(fieldKey(participantId, fixtureId, index));
     if (!field || !validGoal(value)) return false;
-    field.input.setCustomValidity('');
-    field.input.value = value === null ? '' : String(value);
+    field.control.setValue(value);
     field.readout.textContent = value === null ? '—' : String(value);
     compareScore(participantId, fixtureId);
     return true;
@@ -207,30 +208,28 @@ export function mountTitlePicks(container, {
         const label = create('label', 'title-picks__team-score');
         label.append(create('span', 'title-picks__team-name', team));
         const input = create('input', 'title-picks__edit title-picks__goal');
-        input.type = 'number'; input.min = '0'; input.max = '99'; input.step = '1'; input.inputMode = 'numeric';
         input.setAttribute('aria-label', `Palpite ${person.name}: ${team} (${game.title || 'Final'})`);
         input.dataset.participantId = person.id;
         input.dataset.fixtureId = game.id;
         input.dataset.scoreIndex = String(index);
         const readout = create('span', 'title-picks__readout title-picks__goal-readout');
         label.append(input, readout); match.append(label);
-        scores.set(fieldKey(person.id, game.id, index), { input, readout });
+        const control=enhanceScoreInput(input,{
+          onCommit:()=>onCommit?.(),
+          onValue:value=>{
+            readout.textContent = value === null ? '—' : String(value);
+            compareScore(person.id, game.id);
+            void save(person.id, onScore, [person.id, game.id, index, value]);
+          },
+          onNext:()=>{
+            const inputs=[...scores.values()].map(field=>field.input).filter(field=>field.dataset.participantId===person.id);
+            const next=inputs[inputs.indexOf(input)+1];
+            if(next)next.focus();else input.blur();
+          }
+        });
+        scores.set(fieldKey(person.id, game.id, index), { input, readout,control });
         const initial = game.predictions?.[person.id]?.[index];
         setScore(person.id, game.id, index, validGoal(initial) ? initial : null);
-        input.addEventListener('input', () => {
-          input.setCustomValidity('');
-          if (!input.validity.valid) {
-            input.setCustomValidity('Use um número inteiro de 0 a 99.');
-            compareScore(person.id, game.id);
-            input.reportValidity();
-            return;
-          }
-          const value = input.value === '' ? null : Number(input.value);
-          if (!validGoal(value)) return;
-          readout.textContent = value === null ? '—' : String(value);
-          compareScore(person.id, game.id);
-          void save(person.id, onScore, [person.id, game.id, index, value]);
-        });
       });
       fieldset.append(match, comparison); scoreGrid.append(fieldset);
     });
