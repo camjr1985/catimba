@@ -10,6 +10,8 @@ import { projectStandings } from './standings-projection.js?v=20261128-tabela';
 import { enhanceScoreInput } from './score-input.js?v=20261128-digitacao';
 import { readSavedSources,recoverMissing,buildHistoryRows } from './history-data.js?v=20261128-historico';
 import { mountSavedHistory } from './saved-history.js?v=20261128-historico';
+import { fetchLiveMatch } from './live-match-data.js?v=20261128-ao-vivo';
+import { mountLiveMatch } from './live-match.js?v=20261128-ao-vivo';
 
 const $ = id => document.getElementById(id);
 const KEY = 'catimba:v2';
@@ -42,7 +44,7 @@ const fixtures = [
     ['Bahia','Atlético-MG','Arena Fonte Nova'],
     ['Remo','Corinthians','Mangueirão']
   ].map(([home,away,stadium],i)=>cbfMatch(371+i,38,home,away,stadium,'2026-12-02T21:30:00-03:00')),
-  {id:'libertadores:2026:final:palmeiras-estudiantes',competition:'libertadores',season:'2026',round:'final',home:'Palmeiras',away:'Estudiantes',stadium:'Centenário, Montevidéu',kickoff:'2026-11-28T17:00:00-03:00'},
+  {id:'libertadores:2026:final:palmeiras-estudiantes',eventId:'401912519',competition:'libertadores',season:'2026',round:'final',home:'Palmeiras',away:'Estudiantes',stadium:'Centenário, Montevidéu',kickoff:'2026-11-28T17:00:00-03:00'},
   {id:'copa-brasil:2026:final:gremio-palmeiras',competition:'copa-brasil',season:'2026',round:'final',home:'Grêmio',away:'Palmeiras',stadium:'Arena Mané Garrincha, Brasília',kickoff:'2026-12-06T16:00:00-03:00'}
 ];
 const brazilTeams2026=[...new Set(fixtures.filter(game=>game.competition==='brasileirao'&&game.round==='38').flatMap(game=>[game.home,game.away]))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
@@ -149,6 +151,18 @@ loadSavedHistory();
 let titlePicksView=null,officialResults={},latestStandingsTables=[];
 let resultsRequest=0;
 let autoRefreshController=null,officialViewsPending=false;
+let liveMatchView=null,liveMatchRefresh=null,pendingLiveMatch=null;
+function applyLiveMatch(data) {
+  if(document.activeElement?.classList.contains('catimba-score-input')){pendingLiveMatch=data;return;}
+  pendingLiveMatch=null;liveMatchView?.update(data);
+}
+async function refreshLiveMatch(options={}) {
+  const fixture=fixtures.find(game=>game.eventId==='401912519');
+  liveMatchView?.setLoading(true);
+  try{applyLiveMatch(await fetchLiveMatch(fixture,options));}
+  catch{applyLiveMatch({fixtureId:fixture.id,state:'unavailable',home:{name:fixture.home,score:null},away:{name:fixture.away,score:null},stats:[],error:'Não foi possível consultar as estatísticas agora. Haverá nova tentativa automática.',sourceUrl:'https://www.espn.com.br/futebol/partida/_/jogoId/401912519',fetchedAt:null,stale:true});}
+  finally{liveMatchView?.setLoading(false);}
+}
 const scoreControls=new WeakMap();
 let scorePreviewTimer;
 let standingsRenderPending=false;
@@ -163,6 +177,7 @@ function refreshScorePreviews() {
     // Keep editing steady while derived tables above the form are refreshed.
     // The new values are saved immediately; previews wait until focus leaves scores.
     if(document.activeElement?.classList.contains('catimba-score-input'))return;
+    if(pendingLiveMatch)applyLiveMatch(pendingLiveMatch);
     if(officialViewsPending)applyOfficialViews();
     else{renderRanking();renderBoardResults();renderSavedHistory();}
     if(latestStandingsTables.length&&(standingsRenderPending||$('standings-view').value!=='real'))renderStandings(latestStandingsTables);
@@ -505,3 +520,5 @@ $('comparison-person').onchange=()=>{if(latestStandingsTables.length)renderStand
 renderOriginalLineups();renderMatchPitches();
 renderComparisonPeople();renderRounds();renderGames();renderPitch();renderTitlePicks();renderBoardResults();renderSavedHistory();
 autoRefreshController=startAutoRefresh({refreshResults:refreshOfficialResults,refreshStandings});
+liveMatchView=mountLiveMatch($('live-match-panel'),{fixture:fixtures.find(game=>game.eventId==='401912519'),onRefresh:()=>liveMatchRefresh?.refresh()});
+liveMatchRefresh=startAutoRefresh({refreshResults:refreshLiveMatch,refreshStandings:async()=>{},resultInterval:30000});
