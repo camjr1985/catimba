@@ -67,6 +67,7 @@
       <h2 id="ranking-title">Quem manja mais?</h2>
       <div id="ranking" class="ranking"></div>
       <p class="muted">3 pontos pelo placar exato; 1 pelo resultado correto. O palpite do campeão fica registrado à parte.</p>
+      <p class="muted" id="ranking-status" role="status"></p>
       <form id="guest-form" class="inline-form">
         <label for="guest-name">Chama um convidado</label>
         <input id="guest-name" placeholder="Nome do convidado" maxlength="40" required autocomplete="off">
@@ -92,6 +93,7 @@
       <input id="search" type="search" placeholder="Ex.: Palmeiras, Flamengo, Corinthians…" autocomplete="off">
       <p id="fixture-info" class="muted"></p>
       <p id="count" class="match-count" role="status"></p>
+      <p id="auto-results-status" class="muted" role="status">Buscando os resultados automaticamente…</p>
       <p class="entry-help muted">Clique em um placar para trocar o valor. Use Tab entre os campos ou Enter para o próximo palpite do mesmo participante. Seus palpites são salvos enquanto você digita.</p>
       <div id="games"></div>
       <section id="champion-section" class="champion-section" hidden>
@@ -128,7 +130,7 @@
         <li>Na Libertadores, dê também o palpite do campeão: Palmeiras ou Estudiantes.</li>
         <li>Nos campinhos da final, escolha seu nome e arraste os jogadores com o mouse ou o dedo. Solte para salvar. Um clique rápido permite colocar um reserva, mudar o setor ou trocar posições.</li>
         <li>Abra “Nossos campinhos”, escolha o participante e monte a escalação com onze nomes.</li>
-        <li>Depois do jogo, preencha o resultado para calcular os pontos. Exporte seu histórico para ter uma cópia.</li>
+        <li>Os resultados são buscados automaticamente a cada minuto com a aba visível. Quando o placar dos 90 minutos for confirmado pela fonte, a pontuação será calculada sozinha. A classificação é consultada a cada três minutos.</li>
       </ol>
       <p class="muted">Na final, o placar vale pelos 90 minutos e acréscimos. A escolha do campeão considera também eventual prorrogação e pênaltis.</p>
       <div class="backup-actions"><button type="button" id="export">Exportar histórico</button><label class="file-label" for="import">Restaurar histórico</label><input type="file" id="import" accept="application/json,.json"></div>
@@ -136,6 +138,6 @@
     </section>
   </main>
   <footer>AQUI TEM FUTEBOL, RESENHA E CATIMBA!</footer>
-  <script type="module" src="app.js?v=20261128-digitacao"></script>
+  <script type="module" src="app.js?v=20261128-automatico"></script>
 </body>
 </html>
