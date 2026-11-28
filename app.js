@@ -2,7 +2,9 @@ import { mountPitch } from './campinho.js';
 import { mountMatchPitches } from './match-pitches.js?v=20261127-arraste';
 import { finalLineups } from './lineups.js';
 import { mountTitlePicks } from './title-picks.js?v=20261128-digitacao';
-import { fetchMatchResults } from './match-results.js?v=20261128-tabela';
+import { fetchMatchResults } from './match-results.js?v=20261128-automatico';
+import { automaticScore,scorePredictions } from './prediction-scoring.js?v=20261128-automatico';
+import { startAutoRefresh } from './auto-refresh.js?v=20261128-automatico';
 import { projectZones } from './standings-zones.js?v=20261128-tabela';
 import { projectStandings } from './standings-projection.js?v=20261128-tabela';
 import { enhanceScoreInput } from './score-input.js?v=20261128-digitacao';
@@ -124,6 +126,7 @@ function loadState() {
 let state=loadState();
 let titlePicksView=null,officialResults={},latestStandingsTables=[];
 let resultsRequest=0;
+let autoRefreshController=null,officialViewsPending=false;
 const scoreControls=new WeakMap();
 let scorePreviewTimer;
 let standingsRenderPending=false;
@@ -138,7 +141,8 @@ function refreshScorePreviews() {
     // Keep editing steady while derived tables above the form are refreshed.
     // The new values are saved immediately; previews wait until focus leaves scores.
     if(document.activeElement?.classList.contains('catimba-score-input'))return;
-    renderRanking();renderBoardResults();
+    if(officialViewsPending)applyOfficialViews();
+    else{renderRanking();renderBoardResults();}
     if(latestStandingsTables.length&&(standingsRenderPending||$('standings-view').value!=='real'))renderStandings(latestStandingsTables);
   },120);
 }
@@ -170,35 +174,28 @@ function renderRounds() {
   $('round').value=rounds.includes(current)?current:rounds.includes('38')?'38':rounds[0]||'';
 }
 function renderRanking() {
-  const totals=state.participants.map(p=>({name:p.name,points:0}));
-  for(const game of fixtures.filter(g=>!g.archived)) {
-    const result=state.results[game.id]; if(!completePair(result)) continue;
-    state.participants.forEach((p,i)=>{
-      const pick=state.predictions[game.id]?.[p.id]; if(!completePair(pick)) return;
-      totals[i].points+=pick[0]===result[0]&&pick[1]===result[1]?3:Math.sign(pick[0]-pick[1])===Math.sign(result[0]-result[1])?1:0;
-    });
-  }
-  $('ranking').replaceChildren(...totals.sort((a,b)=>b.points-a.points).map(p=>{const item=element('div',p.name,'ranking-item');item.append(element('strong',`${p.points} pts`));return item;}));
+  const {totals,countedMatches,pendingMatches,cachedMatches}=scorePredictions(state.participants,fixtures,state.predictions,officialResults);
+  $('ranking').replaceChildren(...totals.map(p=>{const item=element('div',p.name,'ranking-item');item.append(element('strong',`${p.points} pts`));return item;}));
+  $('ranking-status').textContent=`Pontuação automática: ${countedMatches} jogo${countedMatches===1?'':'s'} com placar de 90 minutos confirmado.${pendingMatches?` ${pendingMatches} partida${pendingMatches===1?' concluída aguarda':'s concluídas aguardam'} a confirmação dos 90 minutos na fonte.`:''}${cachedMatches?` ${cachedMatches} resultado${cachedMatches===1?' vem':'s vêm'} da última cópia guardada.`:''}`;
 }
 function scoreRow(game,participant) {
-  const label=element('div',undefined,`score-row${participant?'':' result-row'}`);
-  const who=participant?.name||'Resultado · 90 minutos';
+  const label=element('div',undefined,'score-row');
+  const who=participant.name;
   label.append(element('span',who));
   const inputs=element('span',undefined,'score-inputs');
-  const pair=participant?state.predictions[game.id]?.[participant.id]:state.results[game.id];
+  const pair=state.predictions[game.id]?.[participant.id];
   [game.home,game.away].forEach((team,i)=>{
     if(i) inputs.append(element('span','×'));
     const goalLabel=element('label',undefined,'score-team');goalLabel.append(element('span',team,'score-team-name'));
     const input=element('input');input.value=pair?.[i]??'';
-    input.dataset.matchId=game.id;input.dataset.participantId=participant?.id||'result';input.dataset.scoreIndex=String(i);
+    input.dataset.matchId=game.id;input.dataset.participantId=participant.id;input.dataset.scoreIndex=String(i);
     input.setAttribute('aria-label',`${who}: ${team} (${game.round==='final'?'final':game.round+'ª rodada'})`);
     goalLabel.append(input);inputs.append(goalLabel);
     const control=enhanceScoreInput(input,{onValue:value=>{
-      let target;
-      if(participant) { state.predictions[game.id]??={};target=state.predictions[game.id][participant.id]??=[null,null]; }
-      else target=state.results[game.id]??=[null,null];
+      state.predictions[game.id]??={};
+      const target=state.predictions[game.id][participant.id]??=[null,null];
       target[i]=value;persist();
-      if(participant)titlePicksView?.setScore(participant.id,game.id,i,value);
+      titlePicksView?.setScore(participant.id,game.id,i,value);
     },onCommit:refreshScorePreviews,onNext:()=>nextGameScore(input)});
     scoreControls.set(input,control);
   });
@@ -228,7 +225,7 @@ function renderGames() {
     const article=element('article');article.dataset.matchId=game.id;article.append(element('h3',`${game.home} × ${game.away}`));
     article.append(element('p',game.kickoff?`${dateLabel(game.kickoff,'America/Sao_Paulo')} (Brasília) · ${dateLabel(game.kickoff,'Europe/Lisbon')} (Lisboa) · ${game.stadium}`:game.stadium,'match-meta'));
     const actual=element('div',undefined,'official-result');actual.dataset.officialMatch=game.id;article.append(actual);
-    state.participants.forEach(p=>article.append(scoreRow(game,p)));article.append(scoreRow(game,null));$('games').append(article);
+    state.participants.forEach(p=>article.append(scoreRow(game,p)));$('games').append(article);
   }
   if(!games.length) $('games').append(element('p',all.length?'Nenhum jogo encontrado. Tente outro nome de time.':'Assim que os confrontos forem conferidos, os campos para palpitar aparecerão aqui.','empty'));
   renderChampions();renderRanking();renderOfficialBlocks();
@@ -253,14 +250,20 @@ function boardFinals() {
     id:game.id,title:names[game.competition],home:game.home,away:game.away,
     kickoffText:`${dateLabel(game.kickoff,'America/Sao_Paulo')} (Brasília) · ${dateLabel(game.kickoff,'Europe/Lisbon')} (Lisboa)`,
     predictions:state.predictions[game.id]||{},
-    officialText:officialResults[game.id]?.officialText||'Agendado · resultado ainda não definido',
+    officialText:finalResultText(officialResults[game.id]),
     winnerText:officialResults[game.id]?.winnerText||'',
-    officialScore:[officialResults[game.id]?.homeScore??null,officialResults[game.id]?.awayScore??null],
+    officialScore:automaticScore(officialResults[game.id])||[null,null],
     completed:officialResults[game.id]?.completed===true,
     regulationConfirmed:officialResults[game.id]?.regulationConfirmed===true,
     winner:officialResults[game.id]?.winner||null,
     sourceUrl:officialResults[game.id]?.sourceUrl||(game.competition==='copa-brasil'?COPA_SOURCE:PALMEIRAS_SOURCE)
   }));
+}
+function finalResultText(actual) {
+  if(!actual)return 'Agendado · resultado ainda não definido';
+  const score=automaticScore(actual);
+  const text=score&&(/pênaltis|prorrogação/i.test(actual.officialText)||actual.homeScore!==score[0]||actual.awayScore!==score[1])?`${actual.officialText} · 90 minutos: ${score[0]} × ${score[1]}`:actual.officialText;
+  return actual.regulationStale?`${text} · confirmação dos 90 minutos na última cópia guardada`:text;
 }
 function renderTitlePicks() {
   const season=$('standings-season').value;
@@ -296,6 +299,10 @@ function renderOfficialBlocks() {
     const game=fixtures.find(game=>game.id===target.dataset.officialMatch),actual=officialResults[game?.id];
     target.replaceChildren();if(!game||game.archived){target.hidden=true;continue;}target.hidden=false;
     target.append(element('strong',actual?.officialText||'Resultado da partida: aguardando consulta da fonte.'));
+    const score=automaticScore(actual);
+    if(score)target.append(element('div',`Resultado automático · 90 minutos: ${game.home} ${score[0]} × ${score[1]} ${game.away}`));
+    else if(actual?.completed)target.append(element('div','Aguardando a confirmação automática do placar dos 90 minutos.'));
+    if(actual?.regulationStale&&actual.regulationFetchedAt)target.append(element('small',`Confirmação dos 90 minutos: cópia de ${dateLabel(actual.regulationFetchedAt,'Europe/Lisbon')} (Lisboa).`));
     if(actual?.winnerText)target.append(element('div',actual.winnerText));
     if(actual?.fetchedAt)target.append(element('small',`${actual.stale?'Cópia guardada':'Fonte consultada'} em ${dateLabel(actual.fetchedAt,'Europe/Lisbon')} (Lisboa).`));
     if(actual?.sourceUrl){const link=element('a','Conferir resultado na fonte');link.href=actual.sourceUrl;link.target='_blank';link.rel='noopener noreferrer';target.append(link);}
@@ -307,7 +314,8 @@ function renderBoardResults() {
     const card=element('article',undefined,'board-result');card.append(element('h4',`${game.home} × ${game.away}`));
     const actual=officialResults[game.id];
     card.append(element('p',actual?.officialText||`${dateLabel(game.kickoff,'America/Sao_Paulo')} (Brasília) · aguardando consulta`));
-    for(const person of state.participants){const pick=state.predictions[game.id]?.[person.id];if(!completePair(pick))continue;const checked=actual?.completed&&actual.regulationConfirmed&&validScore(actual.homeScore)&&validScore(actual.awayScore);const exact=checked&&pick[0]===actual.homeScore&&pick[1]===actual.awayScore;card.append(element('p',`${person.name}: ${pick[0]} × ${pick[1]}${checked?(exact?' · acertou o placar':' · placar diferente do real'):''}`,'board-pick'));}
+    const score=automaticScore(actual);
+    for(const person of state.participants){const pick=state.predictions[game.id]?.[person.id];if(!completePair(pick))continue;const exact=score&&pick[0]===score[0]&&pick[1]===score[1];card.append(element('p',`${person.name}: ${pick[0]} × ${pick[1]}${score?(exact?' · acertou o placar':' · placar diferente do real'):''}`,'board-pick'));}
     if(actual?.stale)card.append(element('p','Cópia guardada da última consulta.','muted'));
     if(actual?.sourceUrl){const link=element('a','Conferir resultado');link.href=actual.sourceUrl;link.target='_blank';link.rel='noopener noreferrer';card.append(link);}
     $('board-results').append(card);
@@ -316,14 +324,20 @@ function renderBoardResults() {
 }
 async function refreshOfficialResults({force=false}={}) {
   const request=++resultsRequest;
-  const relevant=[...new Map([...fixtures.filter(game=>game.competition==='brasileirao'&&game.season===$('standings-season').value),...currentFixtures(),...fixtures.filter(game=>game.round==='final'&&game.season===$('standings-season').value)].filter(game=>!game.archived).map(game=>[game.id,game])).values()];
+  const relevant=fixtures.filter(game=>!game.archived);
   $('results-status').textContent='Consultando os resultados das partidas…';
   try {
     const data=await fetchMatchResults(relevant,{force});if(request!==resultsRequest)return;
     officialResults={...officialResults,...data.results};
     $('results-status').textContent=data.errors.length?'Algumas consultas estão indisponíveis. Cópias anteriores, quando disponíveis, estão identificadas.':`Resultados consultados em ${dateLabel(data.fetchedAt,'Europe/Lisbon')} (Lisboa).`;
-  } catch {if(request!==resultsRequest)return;$('results-status').textContent='Não foi possível consultar os resultados agora. Tente atualizar.';}
-  renderOfficialBlocks();renderBoardResults();titlePicksView?.updateOfficialResults(boardFinals());
+    $('auto-results-status').textContent=`Resultados automáticos · consulta em ${dateLabel(data.fetchedAt,'Europe/Lisbon')} (Lisboa).${data.errors.length?' Alguns jogos aguardam atualização da fonte.':''} Nova consulta a cada minuto enquanto esta aba estiver visível.`;
+  } catch {if(request!==resultsRequest)return;$('results-status').textContent='Não foi possível consultar os resultados agora. Haverá nova tentativa automática.';$('auto-results-status').textContent='Fonte indisponível agora. O Catimba tentará buscar os resultados automaticamente de novo.';}
+  applyOfficialViews();
+}
+function applyOfficialViews() {
+  if(document.activeElement?.classList.contains('catimba-score-input')){officialViewsPending=true;return;}
+  officialViewsPending=false;
+  renderOfficialBlocks();renderBoardResults();renderRanking();titlePicksView?.updateOfficialResults(boardFinals());
   titlePicksView?.updateChampions([{key:'libertadores:2026',champion:officialResults['libertadores:2026:final:palmeiras-estudiantes']?.winner||null},{key:'copa-brasil:2026',champion:officialResults['copa-brasil:2026:final:gremio-palmeiras']?.winner||null}]);
   requestStandingsRender();
 }
@@ -417,12 +431,15 @@ function renderStandings(tables) {
   }
   $('zone-explanation').textContent=season==='2026'?`Vagas para 2027: projeção com ${view==='real'?'a classificação atual':'as posições de cada tabela'} e os desfechos possíveis das finais. Copa do Brasil é uma indicação sobreposta via permanência na Série A; outras vias de entrada também existem.`:'As regras de vagas desta temporada serão conferidas antes de marcar as zonas.';
 }
-async function refreshStandings() {
+async function refreshStandings({reset=false}={}) {
   const request=++standingsRequest,competition='brasileirao',season=$('standings-season').value;
-  latestStandingsTables=[];
-  $('comparison-status').hidden=true;$('comparison-status').textContent='';
-  $('standings').replaceChildren();$('standings-source').replaceChildren();
-  $('zone-legend').replaceChildren();$('zone-explanation').textContent='';
+  if(reset||!latestStandingsTables.length){
+    latestStandingsTables=[];
+    $('comparison-status').hidden=true;$('comparison-status').textContent='';
+    $('standings').replaceChildren();
+    $('zone-legend').replaceChildren();$('zone-explanation').textContent='';
+  }
+  $('standings-source').replaceChildren();
   const url=`https://site.web.api.espn.com/apis/v2/sports/soccer/${leagues[competition]}/standings?season=${season}`;
   const cacheKey=`catimba:standings:${competition}:${season}`;
   $('standings-status').textContent=`Consultando ${names[competition]} ${season}…`;$('refresh-standings').disabled=true;
@@ -444,10 +461,11 @@ async function refreshStandings() {
     } else $('standings-status').textContent=season==='2027'?'A fonte ainda não forneceu uma classificação válida de 2027. Atualize quando a temporada estiver disponível.':'Não foi possível consultar a classificação agora. Tente atualizar ou abra o link da fonte abaixo.';
   } finally { if(request===standingsRequest)$('refresh-standings').disabled=false; }
 }
-$('refresh-standings').onclick=()=>{refreshStandings();refreshOfficialResults({force:true});};
-$('standings-season').onchange=()=>{renderTitlePicks();renderBoardResults();refreshStandings();refreshOfficialResults();};
+$('refresh-standings').onclick=()=>autoRefreshController?.refresh();
+$('standings-season').onchange=()=>{renderTitlePicks();renderBoardResults();refreshStandings({reset:true});refreshOfficialResults();};
 $('board-round').onchange=()=>{renderBoardResults();refreshOfficialResults();};
 $('standings-view').onchange=()=>{if(latestStandingsTables.length)renderStandings(latestStandingsTables);else $('comparison-person-label').hidden=$('standings-view').value==='real';};
 $('comparison-person').onchange=()=>{if(latestStandingsTables.length)renderStandings(latestStandingsTables);};
 renderOriginalLineups();renderMatchPitches();
-renderComparisonPeople();renderRounds();renderGames();renderPitch();renderTitlePicks();renderBoardResults();refreshStandings();refreshOfficialResults();
+renderComparisonPeople();renderRounds();renderGames();renderPitch();renderTitlePicks();renderBoardResults();
+autoRefreshController=startAutoRefresh({refreshResults:refreshOfficialResults,refreshStandings});
