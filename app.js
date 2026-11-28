@@ -1,10 +1,11 @@
 import { mountPitch } from './campinho.js';
 import { mountMatchPitches } from './match-pitches.js?v=20261127-arraste';
 import { finalLineups } from './lineups.js';
-import { mountTitlePicks } from './title-picks.js?v=20261128-tabela';
+import { mountTitlePicks } from './title-picks.js?v=20261128-digitacao';
 import { fetchMatchResults } from './match-results.js?v=20261128-tabela';
 import { projectZones } from './standings-zones.js?v=20261128-tabela';
 import { projectStandings } from './standings-projection.js?v=20261128-tabela';
+import { enhanceScoreInput } from './score-input.js?v=20261128-digitacao';
 
 const $ = id => document.getElementById(id);
 const KEY = 'catimba:v2';
@@ -123,6 +124,29 @@ function loadState() {
 let state=loadState();
 let titlePicksView=null,officialResults={},latestStandingsTables=[];
 let resultsRequest=0;
+const scoreControls=new WeakMap();
+let scorePreviewTimer;
+let standingsRenderPending=false;
+function requestStandingsRender() {
+  if(!latestStandingsTables.length)return;
+  if(document.activeElement?.classList.contains('catimba-score-input')){standingsRenderPending=true;return;}
+  renderStandings(latestStandingsTables);
+}
+function refreshScorePreviews() {
+  clearTimeout(scorePreviewTimer);
+  scorePreviewTimer=setTimeout(()=>{
+    // Keep editing steady while derived tables above the form are refreshed.
+    // The new values are saved immediately; previews wait until focus leaves scores.
+    if(document.activeElement?.classList.contains('catimba-score-input'))return;
+    renderRanking();renderBoardResults();
+    if(latestStandingsTables.length&&(standingsRenderPending||$('standings-view').value!=='real'))renderStandings(latestStandingsTables);
+  },120);
+}
+function nextGameScore(input) {
+  const candidates=[...$('games').querySelectorAll('input')].filter(field=>field.dataset.participantId===input.dataset.participantId);
+  const next=candidates[candidates.indexOf(input)+1];
+  if(next)next.focus();else input.blur();
+}
 function syncLegacyFixture() {
   const previous=fixtures.findIndex(game=>game.id==='legacy:37-0');
   if(previous!==-1)fixtures.splice(previous,1);
@@ -164,21 +188,19 @@ function scoreRow(game,participant) {
   const pair=participant?state.predictions[game.id]?.[participant.id]:state.results[game.id];
   [game.home,game.away].forEach((team,i)=>{
     if(i) inputs.append(element('span','×'));
-    const input=element('input'); input.type='number';input.min='0';input.max='99';input.step='1';input.inputMode='numeric';input.value=pair?.[i]??'';
+    const goalLabel=element('label',undefined,'score-team');goalLabel.append(element('span',team,'score-team-name'));
+    const input=element('input');input.value=pair?.[i]??'';
     input.dataset.matchId=game.id;input.dataset.participantId=participant?.id||'result';input.dataset.scoreIndex=String(i);
     input.setAttribute('aria-label',`${who}: ${team} (${game.round==='final'?'final':game.round+'ª rodada'})`);
-    input.addEventListener('input',()=>{
-      input.setCustomValidity('');
-      if(!input.validity.valid) { input.setCustomValidity('Use um número inteiro de 0 a 99.');input.reportValidity();return; }
-      const value=input.value===''?null:Number(input.value);
-      if(!validScore(value)) return;
+    goalLabel.append(input);inputs.append(goalLabel);
+    const control=enhanceScoreInput(input,{onValue:value=>{
       let target;
       if(participant) { state.predictions[game.id]??={};target=state.predictions[game.id][participant.id]??=[null,null]; }
       else target=state.results[game.id]??=[null,null];
-      target[i]=value; persist();renderRanking();
-      if(participant){titlePicksView?.setScore(participant.id,game.id,i,value);renderBoardResults();if(latestStandingsTables.length&&$('standings-view').value!=='real')renderStandings(latestStandingsTables);}
-    });
-    inputs.append(input);
+      target[i]=value;persist();
+      if(participant)titlePicksView?.setScore(participant.id,game.id,i,value);
+    },onCommit:refreshScorePreviews,onNext:()=>nextGameScore(input)});
+    scoreControls.set(input,control);
   });
   label.append(inputs);return label;
 }
@@ -248,6 +270,7 @@ function renderTitlePicks() {
     {key:`copa-brasil:${season}`,label:'Copa do Brasil',teams:season==='2026'?['Grêmio','Palmeiras']:[],champion:season==='2026'?officialResults['copa-brasil:2026:final:gremio-palmeiras']?.winner:null}
   ].map(item=>({...item,picks:item.key==='libertadores:2026'?state.champions:state.tournamentChampions[item.key]||{}}));
   titlePicksView=mountTitlePicks($('title-picks'),{season,participants:state.participants,competitions,finals:boardFinals(),
+    onCommit:refreshScorePreviews,
     onPick:(id,key,value)=>{
       if(key==='libertadores:2026'){state.champions[id]=value;renderChampions();}
       else{state.tournamentChampions[key]??={};state.tournamentChampions[key][id]=value;}
@@ -255,8 +278,8 @@ function renderTitlePicks() {
     },
     onScore:(id,matchId,index,value)=>{
       state.predictions[matchId]??={};state.predictions[matchId][id]??=[null,null];state.predictions[matchId][id][index]=value;
-      for(const input of $('games').querySelectorAll('input'))if(input.dataset.matchId===matchId&&input.dataset.participantId===id&&Number(input.dataset.scoreIndex)===index)input.value=value??'';
-      renderRanking();return persist('Palpite de placar salvo neste navegador.');
+      for(const input of $('games').querySelectorAll('input'))if(input.dataset.matchId===matchId&&input.dataset.participantId===id&&Number(input.dataset.scoreIndex)===index)scoreControls.get(input)?.setValue(value);
+      refreshScorePreviews();return persist('Palpite de placar salvo neste navegador.');
     }
   });
 }
@@ -302,7 +325,7 @@ async function refreshOfficialResults({force=false}={}) {
   } catch {if(request!==resultsRequest)return;$('results-status').textContent='Não foi possível consultar os resultados agora. Tente atualizar.';}
   renderOfficialBlocks();renderBoardResults();titlePicksView?.updateOfficialResults(boardFinals());
   titlePicksView?.updateChampions([{key:'libertadores:2026',champion:officialResults['libertadores:2026:final:palmeiras-estudiantes']?.winner||null},{key:'copa-brasil:2026',champion:officialResults['copa-brasil:2026:final:gremio-palmeiras']?.winner||null}]);
-  if(latestStandingsTables.length)renderStandings(latestStandingsTables);
+  requestStandingsRender();
 }
 function setRecordingMode(enabled) {
   document.body.classList.toggle('is-recording-mode',enabled);$('recording-mode').setAttribute('aria-pressed',String(enabled));
@@ -347,6 +370,7 @@ function collectTables(node,season) {
   return tables;
 }
 function renderStandings(tables) {
+  standingsRenderPending=false;
   $('standings').replaceChildren();
   const season=$('standings-season').value,view=$('standings-view').value;
   const participant=state.participants.find(person=>person.id===$('comparison-person').value)||state.participants[0];
@@ -409,14 +433,14 @@ async function refreshStandings() {
     if(String(data.season?.year??data.season)!==season)throw new Error('season');
     const tables=collectTables(data,season);if(!tables.length)throw new Error('empty');
     if(request!==standingsRequest)return;
-    const fetchedAt=new Date().toISOString();latestStandingsTables=tables;renderStandings(tables);
+    const fetchedAt=new Date().toISOString();latestStandingsTables=tables;requestStandingsRender();
     $('standings-status').textContent=`Classificação ${season} consultada em ${dateLabel(fetchedAt,'Europe/Lisbon')} (Lisboa).`;
     try{localStorage.setItem(cacheKey,JSON.stringify({season,tables,fetchedAt}));}catch{}
   } catch {
     if(request!==standingsRequest)return;
     let cache;try{cache=JSON.parse(localStorage.getItem(cacheKey));}catch{}
     if(cache?.season===season&&Array.isArray(cache.tables)&&cache.tables.length&&Number.isFinite(Date.parse(cache.fetchedAt))) {
-      latestStandingsTables=cache.tables;renderStandings(cache.tables);$('standings-status').textContent=`Sem conexão com a fonte agora. Exibindo cópia de ${dateLabel(cache.fetchedAt,'Europe/Lisbon')} (Lisboa). Tente atualizar.`;
+      latestStandingsTables=cache.tables;requestStandingsRender();$('standings-status').textContent=`Sem conexão com a fonte agora. Exibindo cópia de ${dateLabel(cache.fetchedAt,'Europe/Lisbon')} (Lisboa). Tente atualizar.`;
     } else $('standings-status').textContent=season==='2027'?'A fonte ainda não forneceu uma classificação válida de 2027. Atualize quando a temporada estiver disponível.':'Não foi possível consultar a classificação agora. Tente atualizar ou abra o link da fonte abaixo.';
   } finally { if(request===standingsRequest)$('refresh-standings').disabled=false; }
 }
