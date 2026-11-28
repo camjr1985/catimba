@@ -1,0 +1,53 @@
+.title-picks{min-width:0;margin:1rem 0 1.3rem;color:#fff}
+.title-picks__heading{margin:0;color:#ffdf00;font:700 1.2rem/1.3 Arial,sans-serif}
+.title-picks__intro{margin:.45rem 0 .9rem;color:#ccc;font-size:14px;line-height:1.45}
+.title-picks__grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px;align-items:stretch}
+.title-picks .title-picks__card{min-width:0;margin:0;padding:14px;border:1px solid #686868;border-top:5px solid #ffdf00;border-radius:8px;background:#151515;color:#fff}
+.title-picks__person{margin:0 0 12px;color:#ffdf00;font:700 1.25rem/1.15 Impact,'Arial Narrow',Arial,sans-serif;letter-spacing:.03em;overflow-wrap:anywhere}
+.title-picks__choices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.title-picks__choice{display:flex;flex-direction:column;min-width:0;gap:5px;margin:0}
+.title-picks__competition{display:block;min-height:2.6em;color:#d7d7d7;font-size:14px;font-weight:700;line-height:1.25;overflow-wrap:anywhere}
+.title-picks .title-picks__select{width:100%;min-width:0;min-height:42px;border:1px solid #7b7b7b;border-radius:5px;padding:8px 28px 8px 8px;background-color:#242424;color:#fff;font:16px/1.3 Arial,sans-serif}
+.title-picks__select:disabled{color:#c5c5c5;opacity:.8;cursor:default}
+.title-picks__scores{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}
+.title-picks__final-pick{min-width:0;margin:0;padding:9px 7px 10px;border:1px solid #525252;border-radius:6px;background:#202020}
+.title-picks__final-pick legend{max-width:100%;padding:0 4px;color:#ffdf00;font-size:14px;font-weight:700;line-height:1.3;overflow-wrap:anywhere}
+.title-picks__score-match{display:grid;grid-template-columns:minmax(0,1fr) 13px minmax(0,1fr);align-items:end;gap:5px}
+.title-picks__team-score{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0;margin:0}
+.title-picks__team-name{width:100%;min-height:2.6em;color:#f5f5f5;font-size:14px;font-weight:700;line-height:1.25;text-align:center;overflow-wrap:anywhere}
+.title-picks .title-picks__goal{width:58px;max-width:100%;min-height:42px;padding:6px;border:1px solid #8c8c8c;border-radius:5px;background:#101010;color:#fff;font:700 20px/1.2 Arial,sans-serif;text-align:center}
+.title-picks__versus{align-self:end;margin-bottom:8px;color:#d7d7d7;font-size:19px;text-align:center}
+.title-picks__status{min-height:1.4em;margin:10px 0 0;color:#b8edc8;font-size:14px;line-height:1.4}
+.title-picks__status--error{color:#ffb6b6}
+.title-picks__comparison{display:block;margin:4px 0 0;color:#d7d7d7;font-size:14px;font-weight:700;line-height:1.35;overflow-wrap:anywhere}
+.title-picks__comparison--correct{color:#b8edc8}
+.title-picks__comparison[hidden]{display:none}
+.title-picks__score-comparison{margin-top:8px;text-align:center}
+.title-picks__readout{display:none}
+.title-picks__champion{color:#fff;font-size:17px;font-weight:700;line-height:1.25;overflow-wrap:anywhere}
+.title-picks__goal-readout{color:#fff;font:700 24px/1.2 Arial,sans-serif;text-align:center}
+.title-picks__officials{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:12px;margin-top:12px}
+.title-picks .title-picks__official{min-width:0;margin:0;padding:12px 14px;border:1px solid #555;border-radius:6px;background:#1e261f;color:#fff}
+.title-picks__official-heading{margin:0 0 3px;color:#abd3b0;font-size:14px;line-height:1.3}
+.title-picks__official-match{margin:0;color:#fff;font-size:16px;font-weight:700;line-height:1.35;overflow-wrap:anywhere}
+.title-picks__kickoff{margin:4px 0;color:#ccc;font-size:14px;line-height:1.35}
+.title-picks__actual{margin:5px 0 0;color:#fff;font-size:16px;font-weight:700;line-height:1.4}
+.title-picks__winner{margin:4px 0 0;color:#ffdf00;font-size:16px;font-weight:700;line-height:1.35}
+.title-picks__source{display:inline-block;margin-top:5px;color:#b8dfff;font-size:14px;line-height:1.3;text-decoration:underline;text-underline-offset:3px}
+.title-picks__source[hidden],.title-picks__winner[hidden]{display:none}
+.title-picks__empty{margin:0;padding:14px;border:1px dashed #777;border-radius:6px;color:#ddd;font-size:16px}
+.title-picks__select:focus-visible,.title-picks__goal:focus-visible,.title-picks__source:focus-visible{outline:3px solid #ffdf00;outline-offset:3px}
+body.is-recording-mode .title-picks__edit{display:none}
+body.is-recording-mode .title-picks__readout{display:block}
+body.is-recording-mode .title-picks__intro,body.is-recording-mode .title-picks__status{display:none}
+body.is-recording-mode .title-picks__heading{font-size:1.1rem;margin-bottom:8px}
+body.is-recording-mode .title-picks__card{padding:10px 12px}
+body.is-recording-mode .title-picks__person{margin-bottom:9px;font-size:1.2rem}
+body.is-recording-mode .title-picks__competition{min-height:0;margin-bottom:3px}
+body.is-recording-mode .title-picks__scores{margin-top:10px;gap:8px}
+body.is-recording-mode .title-picks__final-pick{padding:5px 5px 7px}
+body.is-recording-mode .title-picks__team-name{min-height:0}
+body.is-recording-mode .title-picks__versus{margin-bottom:2px}
+body.is-recording-mode .title-picks__official{padding:9px 12px}
+body.is-recording-mode .title-picks__kickoff{margin:2px 0}
+@media(max-width:480px){.title-picks__grid{grid-template-columns:minmax(0,1fr)}.title-picks__choices{grid-template-columns:minmax(0,1fr)}.title-picks__competition{min-height:0}.title-picks__choice{gap:3px}.title-picks__choices{gap:9px}.title-picks .title-picks__card{padding:12px}body.is-recording-mode .title-picks__choices{grid-template-columns:repeat(3,minmax(0,1fr))}}
