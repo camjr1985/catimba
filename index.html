@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>CATIMBA | Palpites e campinhos</title>
   <link rel="stylesheet" href="styles.css?v=20261127-foto">
+  <link rel="stylesheet" href="title-picks.css?v=20261128-tabela">
+  <link rel="stylesheet" href="board.css?v=20261128-tabela">
   <link rel="stylesheet" href="campinho.css">
   <link rel="stylesheet" href="match-pitches.css?v=20261127-arraste">
 </head>
@@ -41,6 +43,26 @@
   </header>
   <main>
     <p class="notice" id="storage-notice" hidden></p>
+    <section id="standings-board" aria-labelledby="board-title">
+      <div class="board-heading"><div><p class="board-kicker">NA MESA DO CATIMBA</p><h2 id="board-title">Campeões, resultados e classificação</h2></div><button type="button" id="recording-mode" aria-pressed="false">Modo gravação</button></div>
+      <div id="title-picks"></div>
+      <p class="muted screen-only">Palpites de placar valem pelos 90 minutos e acréscimos. O campeão considera a decisão completa. Os resultados da fonte aparecem à parte e podem incluir prorrogação e pênaltis.</p>
+      <div class="board-controls screen-only">
+        <label>Temporada da tabela<select id="standings-season"><option>2026</option><option>2027</option></select></label>
+        <label>Ver classificação<select id="standings-view"><option value="real">Tabela real</option><option value="comparison">Comparar real × palpites</option><option value="projection">Tabela dos palpites</option></select></label>
+        <label id="comparison-person-label" hidden>Palpites de<select id="comparison-person"></select></label>
+        <button type="button" id="refresh-standings">Atualizar tabela e resultados</button>
+      </div>
+      <h3 id="standings-title">Classificação do Brasileirão Série A</h3>
+      <p id="standings-status" role="status">Consultando a classificação…</p>
+      <p id="comparison-status" class="muted" role="status" hidden></p>
+      <div id="zone-legend" class="zone-legend"></div>
+      <div id="standings" class="table-scroll"></div>
+      <p id="zone-explanation" class="muted"></p>
+      <p class="muted" id="standings-source"></p>
+      <details class="zone-rules screen-only"><summary>Como ler as zonas</summary><p>As cores são projeções de vagas para 2027 com a classificação atual, os finalistas conhecidos e os regulamentos. Palpites de campeão não alteram a tabela real. Libertadores e Sul-Americana dependem dos resultados das copas e da permanência na Série A.</p><p>A Copa do Brasil aparece como indicação adicional: a entrada pela Série A se sobrepõe às vagas continentais. A lista de participantes de 2027 também depende de outros critérios.</p><p>Fontes: <a href="https://stcbfsiteprdimgbrs.blob.core.windows.net/img-site/cdn/REC_Brasileiro_Serie_A_2026_c984f8cf05.pdf" target="_blank" rel="noopener noreferrer">regulamento Série A 2026</a> · <a href="https://stcbfsiteprdimgbrs.blob.core.windows.net/img-site/cdn/REC_Copa_do_Brasil_2026_66989a5426.pdf" target="_blank" rel="noopener noreferrer">regulamento Copa do Brasil 2026</a> · <a href="https://www.cbf.com.br/futebol-brasileiro/noticias/campeonato-brasileiro/a/cbf-oficializa-calendario-do-futebol-profissional-masculino-de-2027" target="_blank" rel="noopener noreferrer">calendário CBF 2027</a>.</p></details>
+      <details id="board-results-wrap" class="board-results-wrap"><summary>Resultados da rodada</summary><label class="screen-only">Rodada<select id="board-round"><option value="37">37ª rodada</option><option value="38" selected>38ª rodada</option></select></label><p id="results-status" role="status" class="muted"></p><div id="board-results" class="board-results"></div></details>
+    </section>
     <section aria-labelledby="ranking-title">
       <h2 id="ranking-title">Quem manja mais?</h2>
       <div id="ranking" class="ranking"></div>
@@ -59,6 +81,7 @@
         <label>Campeonato<select id="competition">
           <option value="brasileirao">Brasileirão Série A</option>
           <option value="libertadores">Libertadores</option>
+          <option value="copa-brasil">Copa do Brasil</option>
           <option value="carioca">Campeonato Carioca</option>
           <option value="paulista">Campeonato Paulista</option>
         </select></label>
@@ -94,19 +117,13 @@
 
     <div id="pitch"></div>
 
-    <section aria-labelledby="standings-title">
-      <h2 id="standings-title">Classificação do campeonato</h2>
-      <p id="standings-status" role="status">Consultando a classificação…</p>
-      <div id="standings" class="table-scroll"></div>
-      <button type="button" id="refresh-standings">Atualizar classificação</button>
-      <p class="muted" id="standings-source"></p>
-    </section>
 
     <section aria-labelledby="how-title">
       <h2 id="how-title">Como jogar no Catimba</h2>
       <ol>
         <li>Escolha o campeonato, a temporada e a rodada. A 38ª rodada já abre com os dez jogos.</li>
         <li>Preencha os placares do Carlinhos, do Tiba e dos convidados. Zero é um placar válido; deixe em branco se ainda não decidiu.</li>
+        <li>No painel acima, escolha “Comparar real × palpites” e o participante para confrontar posições, pontos e zonas. A simulação considera os palpites das rodadas 37 e 38 que tenham dados válidos na fonte.</li>
         <li>Na Libertadores, dê também o palpite do campeão: Palmeiras ou Estudiantes.</li>
         <li>Nos campinhos da final, escolha seu nome e arraste os jogadores com o mouse ou o dedo. Solte para salvar. Um clique rápido permite colocar um reserva, mudar o setor ou trocar posições.</li>
         <li>Abra “Nossos campinhos”, escolha o participante e monte a escalação com onze nomes.</li>
@@ -118,6 +135,6 @@
     </section>
   </main>
   <footer>AQUI TEM FUTEBOL, RESENHA E CATIMBA!</footer>
-  <script type="module" src="app.js?v=20261127-arraste"></script>
+  <script type="module" src="app.js?v=20261128-tabela"></script>
 </body>
 </html>

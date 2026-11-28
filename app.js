@@ -1,13 +1,18 @@
 import { mountPitch } from './campinho.js';
 import { mountMatchPitches } from './match-pitches.js?v=20261127-arraste';
 import { finalLineups } from './lineups.js';
+import { mountTitlePicks } from './title-picks.js?v=20261128-tabela';
+import { fetchMatchResults } from './match-results.js?v=20261128-tabela';
+import { projectZones } from './standings-zones.js?v=20261128-tabela';
+import { projectStandings } from './standings-projection.js?v=20261128-tabela';
 
 const $ = id => document.getElementById(id);
 const KEY = 'catimba:v2';
 const CBF_SOURCE = 'https://www.cbf.com.br/futebol-brasileiro/noticias/campeonato-brasileiro/campeonato-brasileiro-serie-a/cbf-publica-tabela-detalhada-das-duas-rodadas-finais-do-brasileirao';
 const PALMEIRAS_SOURCE = 'https://palmeiras.com.br/jogo/?idjogo=5307';
-const names = {brasileirao:'Brasileirão Série A',libertadores:'Libertadores',carioca:'Campeonato Carioca',paulista:'Campeonato Paulista'};
-const leagues = {brasileirao:'bra.1',libertadores:'conmebol.libertadores',carioca:'bra.camp.carioca',paulista:'bra.camp.paulista'};
+const COPA_SOURCE = 'https://www.cbf.com.br/futebol-brasileiro/noticias/copa-brasil/copa-brasil-masculino/gremio-e-palmeiras-decidem-copa-do-brasil-2026-no-dia-6-de-dezembro-as-16-h';
+const names = {brasileirao:'Brasileirão Série A',libertadores:'Libertadores','copa-brasil':'Copa do Brasil',carioca:'Campeonato Carioca',paulista:'Campeonato Paulista'};
+const leagues = {brasileirao:'bra.1',libertadores:'conmebol.libertadores','copa-brasil':'bra.copa_do_brazil',carioca:'bra.camp.carioca',paulista:'bra.camp.paulista'};
 const cbfMatch = (ref, round, home, away, stadium, kickoff) => ({id:`brasileirao:2026:cbf:${ref}`,competition:'brasileirao',season:'2026',round:String(round),home,away,stadium,kickoff});
 const fixtures = [
   cbfMatch(370,37,'Chapecoense','Palmeiras','Arena Condá','2026-11-24T18:00:00-03:00'),
@@ -32,9 +37,11 @@ const fixtures = [
     ['Bahia','Atlético-MG','Arena Fonte Nova'],
     ['Remo','Corinthians','Mangueirão']
   ].map(([home,away,stadium],i)=>cbfMatch(371+i,38,home,away,stadium,'2026-12-02T21:30:00-03:00')),
-  {id:'libertadores:2026:final:palmeiras-estudiantes',competition:'libertadores',season:'2026',round:'final',home:'Palmeiras',away:'Estudiantes',stadium:'Centenário, Montevidéu',kickoff:'2026-11-28T17:00:00-03:00'}
+  {id:'libertadores:2026:final:palmeiras-estudiantes',competition:'libertadores',season:'2026',round:'final',home:'Palmeiras',away:'Estudiantes',stadium:'Centenário, Montevidéu',kickoff:'2026-11-28T17:00:00-03:00'},
+  {id:'copa-brasil:2026:final:gremio-palmeiras',competition:'copa-brasil',season:'2026',round:'final',home:'Grêmio',away:'Palmeiras',stadium:'Arena Mané Garrincha, Brasília',kickoff:'2026-12-06T16:00:00-03:00'}
 ];
-const blankState = () => ({version:2,participants:[{id:'carlinhos',name:'Carlinhos'},{id:'tiba',name:'Tiba'}],predictions:{},results:{},champions:{},lineups:{},teamLineups:{},legacy:{},updatedAt:null});
+const brazilTeams2026=[...new Set(fixtures.filter(game=>game.competition==='brasileirao'&&game.round==='38').flatMap(game=>[game.home,game.away]))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+const blankState = () => ({version:2,participants:[{id:'carlinhos',name:'Carlinhos'},{id:'tiba',name:'Tiba'}],predictions:{},results:{},champions:{},tournamentChampions:{},lineups:{},teamLineups:{},legacy:{},updatedAt:null});
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const validScore = value => value === null || (Number.isInteger(value) && value >= 0 && value <= 99);
 const validPair = value => Array.isArray(value) && value.length === 2 && value.every(validScore);
@@ -52,6 +59,17 @@ function validateState(value) {
   for (const picks of Object.values(value.predictions)) if (!isRecord(picks) || Object.entries(picks).some(([id,pair])=>!ids.has(id)||!validPair(pair))) return false;
   if (Object.values(value.results).some(pair=>!validPair(pair))) return false;
   if (Object.entries(value.champions).some(([id,team])=>!ids.has(id)||!['','Palmeiras','Estudiantes'].includes(team))) return false;
+  if(value.tournamentChampions!==undefined) {
+    if(!isRecord(value.tournamentChampions))return false;
+    for(const [competition,picks] of Object.entries(value.tournamentChampions)) {
+      if(!/^(brasileirao|libertadores|copa-brasil):202[67]$/.test(competition)||!isRecord(picks))return false;
+      for(const [id,team] of Object.entries(picks)) {
+        if(!ids.has(id)||typeof team!=='string'||team.length>80)return false;
+        if(competition==='brasileirao:2026'&&!['',...brazilTeams2026].includes(team))return false;
+        if(competition==='copa-brasil:2026'&&!['','Grêmio','Palmeiras'].includes(team))return false;
+      }
+    }
+  }
   for (const [id,lineup] of Object.entries(value.lineups)) if (!ids.has(id)||!isRecord(lineup)||typeof lineup.teamName!=='string'||lineup.teamName.length>100||!Array.isArray(lineup.players)||lineup.players.length!==11||lineup.players.some(name=>typeof name!=='string'||name.length>100)) return false;
   if(value.teamLineups!==undefined) {
     if(!isRecord(value.teamLineups))return false;
@@ -91,6 +109,7 @@ function loadState() {
       const parsed=JSON.parse(saved);
       if (!validateState(parsed)) throw new Error('Formato do histórico inválido');
       parsed.teamLineups??={};
+      parsed.tournamentChampions??={};
       return parsed;
     }
     const old=JSON.parse(localStorage.getItem('catimba') || '{}');
@@ -102,6 +121,8 @@ function loadState() {
   }
 }
 let state=loadState();
+let titlePicksView=null,officialResults={},latestStandingsTables=[];
+let resultsRequest=0;
 function syncLegacyFixture() {
   const previous=fixtures.findIndex(game=>game.id==='legacy:37-0');
   if(previous!==-1)fixtures.splice(previous,1);
@@ -144,6 +165,7 @@ function scoreRow(game,participant) {
   [game.home,game.away].forEach((team,i)=>{
     if(i) inputs.append(element('span','×'));
     const input=element('input'); input.type='number';input.min='0';input.max='99';input.step='1';input.inputMode='numeric';input.value=pair?.[i]??'';
+    input.dataset.matchId=game.id;input.dataset.participantId=participant?.id||'result';input.dataset.scoreIndex=String(i);
     input.setAttribute('aria-label',`${who}: ${team} (${game.round==='final'?'final':game.round+'ª rodada'})`);
     input.addEventListener('input',()=>{
       input.setCustomValidity('');
@@ -154,6 +176,7 @@ function scoreRow(game,participant) {
       if(participant) { state.predictions[game.id]??={};target=state.predictions[game.id][participant.id]??=[null,null]; }
       else target=state.results[game.id]??=[null,null];
       target[i]=value; persist();renderRanking();
+      if(participant){titlePicksView?.setScore(participant.id,game.id,i,value);renderBoardResults();if(latestStandingsTables.length&&$('standings-view').value!=='real')renderStandings(latestStandingsTables);}
     });
     inputs.append(input);
   });
@@ -166,7 +189,7 @@ function renderChampions() {
   $('champion-picks').replaceChildren(...state.participants.map(p=>{
     const label=element('label',p.name,'champion-row'),select=element('select');select.setAttribute('aria-label',`Campeão da Libertadores · ${p.name}`);
     for(const team of ['','Palmeiras','Estudiantes']) { const option=element('option',team||'Escolha seu campeão');option.value=team;select.append(option); }
-    select.value=state.champions[p.id]||'';select.onchange=()=>{state.champions[p.id]=select.value;persist();};label.append(select);return label;
+    select.value=state.champions[p.id]||'';select.onchange=()=>{state.champions[p.id]=select.value;persist();titlePicksView?.setPick(p.id,'libertadores:2026',select.value);};label.append(select);return label;
   }));
 }
 function renderGames() {
@@ -174,7 +197,7 @@ function renderGames() {
   const games=all.filter(g=>normal(`${g.home} ${g.away}`).includes(query));
   $('games').replaceChildren();$('fixture-info').replaceChildren();
   if(all.length) {
-    const source=element('a',all[0].archived?'':'Calendário conferido em fonte oficial');source.href=$('competition').value==='libertadores'?PALMEIRAS_SOURCE:CBF_SOURCE;source.target='_blank';source.rel='noopener noreferrer';
+    const source=element('a',all[0].archived?'':'Calendário conferido em fonte oficial');source.href=$('competition').value==='libertadores'?PALMEIRAS_SOURCE:$('competition').value==='copa-brasil'?COPA_SOURCE:CBF_SOURCE;source.target='_blank';source.rel='noopener noreferrer';
     if(all[0].archived) $('fixture-info').textContent='Arquivo dos palpites da versão anterior. Este confronto provisório não pertence à tabela oficial da 37ª rodada e não entra na pontuação.';
     else { $('fixture-info').append(source,document.createTextNode(' · Conferido em 27/11/2026. Horários abaixo em Brasília e Lisboa.')); }
   } else $('fixture-info').textContent=`${names[$('competition').value]} ${$('season').value}: os jogos ainda não foram cadastrados e conferidos no Catimba. O calendário será incluído após a conferência da fonte oficial.`;
@@ -182,10 +205,11 @@ function renderGames() {
   for(const game of games) {
     const article=element('article');article.dataset.matchId=game.id;article.append(element('h3',`${game.home} × ${game.away}`));
     article.append(element('p',game.kickoff?`${dateLabel(game.kickoff,'America/Sao_Paulo')} (Brasília) · ${dateLabel(game.kickoff,'Europe/Lisbon')} (Lisboa) · ${game.stadium}`:game.stadium,'match-meta'));
+    const actual=element('div',undefined,'official-result');actual.dataset.officialMatch=game.id;article.append(actual);
     state.participants.forEach(p=>article.append(scoreRow(game,p)));article.append(scoreRow(game,null));$('games').append(article);
   }
   if(!games.length) $('games').append(element('p',all.length?'Nenhum jogo encontrado. Tente outro nome de time.':'Assim que os confrontos forem conferidos, os campos para palpitar aparecerão aqui.','empty'));
-  renderChampions();renderRanking();
+  renderChampions();renderRanking();renderOfficialBlocks();
 }
 function renderPitch() { mountPitch($('pitch'),{participants:state.participants,lineups:state.lineups,onSave:(id,lineup)=>{state.lineups[id]=lineup;return persist('Campinho salvo neste navegador.');}}); }
 function renderMatchPitches() {
@@ -202,14 +226,99 @@ function renderOriginalLineups() {
     const source=element('a',team.sourceLabel);source.href=team.sourceUrl;source.target='_blank';source.rel='noopener noreferrer';card.append(source);return card;
   }));
 }
+function boardFinals() {
+  return fixtures.filter(game=>game.round==='final'&&game.season===$('standings-season').value).map(game=>({
+    id:game.id,title:names[game.competition],home:game.home,away:game.away,
+    kickoffText:`${dateLabel(game.kickoff,'America/Sao_Paulo')} (Brasília) · ${dateLabel(game.kickoff,'Europe/Lisbon')} (Lisboa)`,
+    predictions:state.predictions[game.id]||{},
+    officialText:officialResults[game.id]?.officialText||'Agendado · resultado ainda não definido',
+    winnerText:officialResults[game.id]?.winnerText||'',
+    officialScore:[officialResults[game.id]?.homeScore??null,officialResults[game.id]?.awayScore??null],
+    completed:officialResults[game.id]?.completed===true,
+    regulationConfirmed:officialResults[game.id]?.regulationConfirmed===true,
+    winner:officialResults[game.id]?.winner||null,
+    sourceUrl:officialResults[game.id]?.sourceUrl||(game.competition==='copa-brasil'?COPA_SOURCE:PALMEIRAS_SOURCE)
+  }));
+}
+function renderTitlePicks() {
+  const season=$('standings-season').value;
+  const competitions=[
+    {key:`brasileirao:${season}`,label:'Brasileirão',teams:season==='2026'?brazilTeams2026:[]},
+    {key:`libertadores:${season}`,label:'Libertadores',teams:season==='2026'?['Palmeiras','Estudiantes']:[],champion:season==='2026'?officialResults['libertadores:2026:final:palmeiras-estudiantes']?.winner:null},
+    {key:`copa-brasil:${season}`,label:'Copa do Brasil',teams:season==='2026'?['Grêmio','Palmeiras']:[],champion:season==='2026'?officialResults['copa-brasil:2026:final:gremio-palmeiras']?.winner:null}
+  ].map(item=>({...item,picks:item.key==='libertadores:2026'?state.champions:state.tournamentChampions[item.key]||{}}));
+  titlePicksView=mountTitlePicks($('title-picks'),{season,participants:state.participants,competitions,finals:boardFinals(),
+    onPick:(id,key,value)=>{
+      if(key==='libertadores:2026'){state.champions[id]=value;renderChampions();}
+      else{state.tournamentChampions[key]??={};state.tournamentChampions[key][id]=value;}
+      return persist('Palpite de campeão salvo neste navegador.');
+    },
+    onScore:(id,matchId,index,value)=>{
+      state.predictions[matchId]??={};state.predictions[matchId][id]??=[null,null];state.predictions[matchId][id][index]=value;
+      for(const input of $('games').querySelectorAll('input'))if(input.dataset.matchId===matchId&&input.dataset.participantId===id&&Number(input.dataset.scoreIndex)===index)input.value=value??'';
+      renderRanking();return persist('Palpite de placar salvo neste navegador.');
+    }
+  });
+}
+function boardRoundFixtures() {
+  return fixtures.filter(game=>game.competition==='brasileirao'&&game.season===$('standings-season').value&&game.round===$('board-round').value);
+}
+function renderComparisonPeople() {
+  const selected=$('comparison-person').value;
+  $('comparison-person').replaceChildren(...state.participants.map(person=>{const option=element('option',person.name);option.value=person.id;return option;}));
+  $('comparison-person').value=state.participants.some(person=>person.id===selected)?selected:state.participants[0].id;
+}
+function renderOfficialBlocks() {
+  for(const target of document.querySelectorAll('[data-official-match]')) {
+    const game=fixtures.find(game=>game.id===target.dataset.officialMatch),actual=officialResults[game?.id];
+    target.replaceChildren();if(!game||game.archived){target.hidden=true;continue;}target.hidden=false;
+    target.append(element('strong',actual?.officialText||'Resultado da partida: aguardando consulta da fonte.'));
+    if(actual?.winnerText)target.append(element('div',actual.winnerText));
+    if(actual?.fetchedAt)target.append(element('small',`${actual.stale?'Cópia guardada':'Fonte consultada'} em ${dateLabel(actual.fetchedAt,'Europe/Lisbon')} (Lisboa).`));
+    if(actual?.sourceUrl){const link=element('a','Conferir resultado na fonte');link.href=actual.sourceUrl;link.target='_blank';link.rel='noopener noreferrer';target.append(link);}
+  }
+}
+function renderBoardResults() {
+  const games=boardRoundFixtures();$('board-results').replaceChildren();
+  for(const game of games){
+    const card=element('article',undefined,'board-result');card.append(element('h4',`${game.home} × ${game.away}`));
+    const actual=officialResults[game.id];
+    card.append(element('p',actual?.officialText||`${dateLabel(game.kickoff,'America/Sao_Paulo')} (Brasília) · aguardando consulta`));
+    for(const person of state.participants){const pick=state.predictions[game.id]?.[person.id];if(!completePair(pick))continue;const checked=actual?.completed&&actual.regulationConfirmed&&validScore(actual.homeScore)&&validScore(actual.awayScore);const exact=checked&&pick[0]===actual.homeScore&&pick[1]===actual.awayScore;card.append(element('p',`${person.name}: ${pick[0]} × ${pick[1]}${checked?(exact?' · acertou o placar':' · placar diferente do real'):''}`,'board-pick'));}
+    if(actual?.stale)card.append(element('p','Cópia guardada da última consulta.','muted'));
+    if(actual?.sourceUrl){const link=element('a','Conferir resultado');link.href=actual.sourceUrl;link.target='_blank';link.rel='noopener noreferrer';card.append(link);}
+    $('board-results').append(card);
+  }
+  if(!games.length)$('board-results').append(element('p','Jogos desta temporada ainda aguardam cadastro e conferência.','muted'));
+}
+async function refreshOfficialResults({force=false}={}) {
+  const request=++resultsRequest;
+  const relevant=[...new Map([...fixtures.filter(game=>game.competition==='brasileirao'&&game.season===$('standings-season').value),...currentFixtures(),...fixtures.filter(game=>game.round==='final'&&game.season===$('standings-season').value)].filter(game=>!game.archived).map(game=>[game.id,game])).values()];
+  $('results-status').textContent='Consultando os resultados das partidas…';
+  try {
+    const data=await fetchMatchResults(relevant,{force});if(request!==resultsRequest)return;
+    officialResults={...officialResults,...data.results};
+    $('results-status').textContent=data.errors.length?'Algumas consultas estão indisponíveis. Cópias anteriores, quando disponíveis, estão identificadas.':`Resultados consultados em ${dateLabel(data.fetchedAt,'Europe/Lisbon')} (Lisboa).`;
+  } catch {if(request!==resultsRequest)return;$('results-status').textContent='Não foi possível consultar os resultados agora. Tente atualizar.';}
+  renderOfficialBlocks();renderBoardResults();titlePicksView?.updateOfficialResults(boardFinals());
+  titlePicksView?.updateChampions([{key:'libertadores:2026',champion:officialResults['libertadores:2026:final:palmeiras-estudiantes']?.winner||null},{key:'copa-brasil:2026',champion:officialResults['copa-brasil:2026:final:gremio-palmeiras']?.winner||null}]);
+  if(latestStandingsTables.length)renderStandings(latestStandingsTables);
+}
+function setRecordingMode(enabled) {
+  document.body.classList.toggle('is-recording-mode',enabled);$('recording-mode').setAttribute('aria-pressed',String(enabled));
+  $('recording-mode').textContent=enabled?'Sair da gravação':'Modo gravação';
+  if(enabled)$('standings-board').scrollIntoView({block:'start',behavior:'instant'});
+}
+$('recording-mode').onclick=()=>setRecordingMode(!document.body.classList.contains('is-recording-mode'));
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&document.body.classList.contains('is-recording-mode'))setRecordingMode(false);});
 $('guest-form').onsubmit=event=>{
   event.preventDefault();const name=$('guest-name').value.trim().replace(/\s+/g,' ');
   if(!name||state.participants.some(p=>normal(p.name)===normal(name))) { $('guest-status').textContent='Digite um nome diferente dos participantes já cadastrados.';return; }
   if(state.participants.length>=100) {$('guest-status').textContent='Limite de 100 participantes atingido.';return;}
-  state.participants.push({id:`guest-${crypto.randomUUID()}`,name});const saved=persist();$('guest-name').value='';$('guest-status').textContent=saved?`${name} entrou no Catimba. Já pode palpitar e montar seu campinho.`:`${name} foi adicionado, mas não foi possível salvar. Exporte uma cópia.`;renderGames();renderPitch();renderMatchPitches();
+  state.participants.push({id:`guest-${crypto.randomUUID()}`,name});const saved=persist();$('guest-name').value='';$('guest-status').textContent=saved?`${name} entrou no Catimba. Já pode palpitar e montar seu campinho.`:`${name} foi adicionado, mas não foi possível salvar. Exporte uma cópia.`;renderGames();renderPitch();renderMatchPitches();renderTitlePicks();renderComparisonPeople();if(latestStandingsTables.length)renderStandings(latestStandingsTables);
 };
-$('search').oninput=renderGames;$('round').onchange=renderGames;
-$('competition').onchange=$('season').onchange=()=>{renderRounds();renderGames();refreshStandings();};
+$('search').oninput=renderGames;$('round').onchange=()=>{renderGames();refreshOfficialResults();};
+$('competition').onchange=$('season').onchange=()=>{renderRounds();renderGames();refreshOfficialResults();};
 $('save').onclick=()=>persist('Palpites e campinhos salvos neste navegador.');
 $('export').onclick=()=>{
   const url=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:'application/json'}));const anchor=element('a');anchor.href=url;anchor.download=`catimba-${new Date().toISOString().slice(0,10)}.json`;anchor.click();setTimeout(()=>URL.revokeObjectURL(url),1000);$('backup-status').textContent='Histórico exportado com palpites, campeões, convidados e campinhos.';
@@ -222,8 +331,9 @@ $('import').onchange=async()=>{
     if(isRecord(imported)&&imported.version===undefined&&Object.keys(imported).length&&Object.entries(imported).every(([key,values])=>/^\d+-\d+$/.test(key)&&Array.isArray(values)&&values.length===6&&values.every(validScore)))imported=migrateLegacy(imported);
     if(!validateState(imported))throw new Error('format');
     imported.teamLineups??={};
+    imported.tournamentChampions??={};
     localStorage.setItem(`catimba:before-import:${Date.now()}`,JSON.stringify(state));
-    localStorage.setItem(KEY,JSON.stringify(imported));state=imported;syncLegacyFixture();$('backup-status').textContent='Histórico restaurado. A versão anterior ficou guardada neste navegador.';renderRounds();renderGames();renderPitch();renderMatchPitches();
+    localStorage.setItem(KEY,JSON.stringify(imported));state=imported;syncLegacyFixture();$('backup-status').textContent='Histórico restaurado. A versão anterior ficou guardada neste navegador.';renderRounds();renderGames();renderPitch();renderMatchPitches();renderTitlePicks();renderComparisonPeople();if(latestStandingsTables.length)renderStandings(latestStandingsTables);
   } catch { $('backup-status').textContent='Não foi possível restaurar. Use um arquivo de histórico do Catimba exportado nesta versão. Seus palpites atuais foram mantidos.'; }
   $('import').value='';
 };
@@ -238,24 +348,57 @@ function collectTables(node,season) {
 }
 function renderStandings(tables) {
   $('standings').replaceChildren();
+  const season=$('standings-season').value,view=$('standings-view').value;
+  const participant=state.participants.find(person=>person.id===$('comparison-person').value)||state.participants[0];
+  $('comparison-person-label').hidden=view==='real';
+  $('comparison-status').hidden=view==='real';
+  $('standings-title').textContent=view==='real'?`Classificação real do Brasileirão Série A · ${season}`:`${view==='comparison'?'Tabela real × palpites':'Tabela dos palpites'} · ${participant.name} · ${season}`;
+  $('zone-legend').replaceChildren();
+  if(season==='2026')for(const [label,type] of [['Libertadores','libertadores'],['Sul-Americana','sulamericana'],['Vagas dependentes das finais','pending'],['Copa do Brasil · indicação adicional','copa'],['Rebaixamento','relegation']])$('zone-legend').append(element('span',label,`zone-key zone-key--${type}`));
+  const zoneOptions={season,libertadoresWinner:officialResults['libertadores:2026:final:palmeiras-estudiantes']?.winner||null,copaWinner:officialResults['copa-brasil:2026:final:gremio-palmeiras']?.winner||null};
+  function zoneCell(zone) {
+    const cell=element('td',undefined,'standing-zone');cell.append(element('span',zone?.label||'Critérios de vagas a conferir'));
+    if(zone?.copa2027){const badge=element('span','CdB 2027','copa-badge');badge.title='Projeção de participação via permanência na Série A; sobrepõe-se às vagas continentais.';cell.append(badge);}
+    return cell;
+  }
   for(const group of tables) {
     if(tables.length>1)$('standings').append(element('h3',group.name||'Grupo'));
-    const table=element('table'),caption=element('caption',`${names[$('competition').value]} ${$('season').value}${tables.length>1?' · '+group.name:''}`),thead=element('thead'),header=element('tr');
-    ['Pos.','Time','Pts','J','V','E','D','SG'].forEach(h=>{const th=element('th',h);th.scope='col';header.append(th);});thead.append(header);table.append(caption,thead);
+    const rows=group.entries.map((entry,i)=>{const stats=Object.fromEntries((entry.stats||[]).map(stat=>[stat.name,stat.value??stat.displayValue]));return{teamName:entry.team?.displayName||entry.team?.name||'—',rank:Number(stats.rank??i+1),stats};}).sort((a,b)=>a.rank-b.rank);
+    const projection=view==='real'?null:projectStandings(rows,{fixtures,predictions:state.predictions,participantId:participant.id,officialResults,season});
+    const projectedRows=projection?.rows||rows;
+    const realZones=projectZones(rows,zoneOptions),predictedZones=projectZones(projectedRows,zoneOptions);
+    const table=element('table',undefined,view==='comparison'?'comparison-table':''),caption=element('caption',view==='real'?`Tabela real · Brasileirão Série A ${season}`:`${view==='comparison'?'Comparação com a tabela real':'Simulação dos palpites'} · ${participant.name}`),thead=element('thead'),header=element('tr');
+    const labels=view==='comparison'?['Time','Pos. real','Pos. palpite','Pts reais','Pts palpite','Dif. pts','Vagas · tabela real','Vagas · palpites']:['Pos.','Time','Pts','J','V','E','D','SG','Vagas · projeção'];
+    labels.forEach(h=>{const th=element('th',h);th.scope='col';header.append(th);});thead.append(header);table.append(caption,thead);
     const body=element('tbody');
-    group.entries.forEach((entry,i)=>{
-      const stats=Object.fromEntries((entry.stats||[]).map(stat=>[stat.name,stat.displayValue??stat.value]));
-      const row=element('tr');[stats.rank??i+1,entry.team?.displayName||entry.team?.name||'—',stats.points,stats.gamesPlayed,stats.wins,stats.ties,stats.losses,stats.pointDifferential??stats.goalDifference].forEach(value=>row.append(element('td',value===undefined?'—':String(value))));body.append(row);
-    });table.append(body);$('standings').append(table);
+    const displayRows=view==='real'?rows:projectedRows;
+    for(const item of displayRows){
+      const {rank,teamName,stats}=item,zone=(view==='real'?realZones:predictedZones)[teamName],row=element('tr',undefined,zone?`zone-${zone.type}`:undefined);
+      const actual=rows.find(real=>real.teamName===teamName);
+      if(view==='comparison'){
+        const diff=Number(stats.points)-Number(actual.stats.points),movement=actual.rank-rank;
+        [teamName,actual.rank,`${rank}${item.tied?'*':''}${movement?` (${movement>0?'↑':'↓'}${Math.abs(movement)})`:''}`,actual.stats.points,stats.points,`${diff>0?'+':''}${diff}`].forEach(value=>row.append(element('td',String(value))));
+        row.append(zoneCell(realZones[teamName]),zoneCell(zone));
+      }else{
+        [view==='projection'&&item.tied?`${rank}*`:rank,teamName,stats.points,stats.gamesPlayed,stats.wins,stats.ties,stats.losses,stats.pointDifferential??stats.goalDifference].forEach(value=>row.append(element('td',value===undefined?'—':String(value))));
+        row.append(zoneCell(zone));
+      }
+      body.append(row);
+    }
+    table.append(body);$('standings').append(table);
+    if(projection){
+      const count=projection.appliedCount||0,played=projection.completedCount||0;
+      $('comparison-status').textContent=`Simulação de ${participant.name}: ${count} palpite${count===1?'':'s'} aplicado${count===1?'':'s'} nas rodadas 37 e 38.${played?` Em ${played} jogo${played===1?' já realizado, o resultado real foi substituído':'s já realizados, os resultados reais foram substituídos'} pelo palpite nesta cópia.`:''}${projection.pendingCount?` ${projection.pendingCount} jogo${projection.pendingCount===1?' aguarda':'s aguardam'} palpite completo ou dados válidos.`:''}${projection.skippedCount?' Jogos ao vivo ficam fora do cálculo.':''}${!count?' Preencha os placares em “Bora palpitar!” e atualize os resultados.':''}${projection.tied?' * Desempate pendente: confronto direto, cartões ou outros dados não disponíveis; ordem real mantida como referência.':''} Projeção parcial; a tabela real permanece separada.`;
+    }
   }
+  $('zone-explanation').textContent=season==='2026'?`Vagas para 2027: projeção com ${view==='real'?'a classificação atual':'as posições de cada tabela'} e os desfechos possíveis das finais. Copa do Brasil é uma indicação sobreposta via permanência na Série A; outras vias de entrada também existem.`:'As regras de vagas desta temporada serão conferidas antes de marcar as zonas.';
 }
 async function refreshStandings() {
-  const request=++standingsRequest,competition=$('competition').value,season=$('season').value;
+  const request=++standingsRequest,competition='brasileirao',season=$('standings-season').value;
+  latestStandingsTables=[];
+  $('comparison-status').hidden=true;$('comparison-status').textContent='';
   $('standings').replaceChildren();$('standings-source').replaceChildren();
-  if(competition==='libertadores'&&season==='2026') {
-    $('standings-status').textContent='Final em jogo único: Palmeiras × Estudiantes, em 28/11/2026. Dê seu palpite de placar e campeão acima.';
-    const source=element('a','Conferir a final no site oficial do Palmeiras');source.href=PALMEIRAS_SOURCE;source.target='_blank';source.rel='noopener noreferrer';$('standings-source').append(source);$('refresh-standings').disabled=false;return;
-  }
+  $('zone-legend').replaceChildren();$('zone-explanation').textContent='';
   const url=`https://site.web.api.espn.com/apis/v2/sports/soccer/${leagues[competition]}/standings?season=${season}`;
   const cacheKey=`catimba:standings:${competition}:${season}`;
   $('standings-status').textContent=`Consultando ${names[competition]} ${season}…`;$('refresh-standings').disabled=true;
@@ -266,17 +409,21 @@ async function refreshStandings() {
     if(String(data.season?.year??data.season)!==season)throw new Error('season');
     const tables=collectTables(data,season);if(!tables.length)throw new Error('empty');
     if(request!==standingsRequest)return;
-    const fetchedAt=new Date().toISOString();renderStandings(tables);
+    const fetchedAt=new Date().toISOString();latestStandingsTables=tables;renderStandings(tables);
     $('standings-status').textContent=`Classificação ${season} consultada em ${dateLabel(fetchedAt,'Europe/Lisbon')} (Lisboa).`;
     try{localStorage.setItem(cacheKey,JSON.stringify({season,tables,fetchedAt}));}catch{}
   } catch {
     if(request!==standingsRequest)return;
     let cache;try{cache=JSON.parse(localStorage.getItem(cacheKey));}catch{}
     if(cache?.season===season&&Array.isArray(cache.tables)&&cache.tables.length&&Number.isFinite(Date.parse(cache.fetchedAt))) {
-      renderStandings(cache.tables);$('standings-status').textContent=`Sem conexão com a fonte agora. Exibindo cópia de ${dateLabel(cache.fetchedAt,'Europe/Lisbon')} (Lisboa). Tente atualizar.`;
+      latestStandingsTables=cache.tables;renderStandings(cache.tables);$('standings-status').textContent=`Sem conexão com a fonte agora. Exibindo cópia de ${dateLabel(cache.fetchedAt,'Europe/Lisbon')} (Lisboa). Tente atualizar.`;
     } else $('standings-status').textContent=season==='2027'?'A fonte ainda não forneceu uma classificação válida de 2027. Atualize quando a temporada estiver disponível.':'Não foi possível consultar a classificação agora. Tente atualizar ou abra o link da fonte abaixo.';
   } finally { if(request===standingsRequest)$('refresh-standings').disabled=false; }
 }
-$('refresh-standings').onclick=refreshStandings;
+$('refresh-standings').onclick=()=>{refreshStandings();refreshOfficialResults({force:true});};
+$('standings-season').onchange=()=>{renderTitlePicks();renderBoardResults();refreshStandings();refreshOfficialResults();};
+$('board-round').onchange=()=>{renderBoardResults();refreshOfficialResults();};
+$('standings-view').onchange=()=>{if(latestStandingsTables.length)renderStandings(latestStandingsTables);else $('comparison-person-label').hidden=$('standings-view').value==='real';};
+$('comparison-person').onchange=()=>{if(latestStandingsTables.length)renderStandings(latestStandingsTables);};
 renderOriginalLineups();renderMatchPitches();
-renderRounds();renderGames();renderPitch();refreshStandings();
+renderComparisonPeople();renderRounds();renderGames();renderPitch();renderTitlePicks();renderBoardResults();refreshStandings();refreshOfficialResults();
