@@ -11,6 +11,8 @@
 .live-match__scoreboard{display:grid;grid-template-columns:minmax(0,1fr) 30px minmax(0,1fr);align-items:stretch;gap:10px}
 .live-match__team{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-width:0;padding:15px 12px 13px;border:1px solid #52705c;border-radius:8px}
 .live-match__team--home{background:#103722;border-color:#4c9066}.live-match__team--away{background:#3b171b;border-color:#a35a63}
+.live-match__identity{display:flex;align-items:center;justify-content:center;gap:12px;max-width:100%;min-width:0}
+.live-match__crest{display:block;width:clamp(48px,6vw,76px);height:clamp(48px,6vw,76px);object-fit:contain;flex-shrink:0;filter:drop-shadow(0 2px 3px #0006)}
 .live-match__team-name{font-size:clamp(17px,2.4vw,25px);line-height:1.3;text-align:center;text-transform:uppercase;letter-spacing:.025em;overflow-wrap:anywhere}
 .live-match__score{font:800 clamp(44px,7vw,68px)/1.1 Arial,sans-serif;font-variant-numeric:tabular-nums;color:#fff;min-width:1.3em;text-align:center}
 .live-match__versus{align-self:center;justify-self:center;font-size:25px;font-weight:700;color:#ffdf00}
@@ -34,3 +36,4 @@
 body.is-recording-mode .live-match{padding:14px;margin:14px 0 20px}body.is-recording-mode .live-match__refresh{font-size:13px;min-width:130px}body.is-recording-mode .live-match__team{padding:10px}body.is-recording-mode .live-match__score{font-size:56px}
 @media(max-width:600px){.live-match{padding:13px}.live-match__toolbar{align-items:flex-start;gap:10px}.live-match .live-match__heading{font-size:19px}.live-match .live-match__refresh{min-width:118px;padding:8px 10px;font-size:13px}.live-match__team{padding:12px 7px}.live-match__scoreboard{gap:6px;grid-template-columns:minmax(0,1fr) 21px minmax(0,1fr)}.live-match__team-name{font-size:17px}.live-match__versus{font-size:21px}.live-match__stats .live-match__metric{font-size:13px}.live-match__stats .live-match__stat-value{font-size:19px}.live-match__footer{flex-direction:column;gap:5px}}
 @media(max-width:380px){.live-match__toolbar{flex-direction:column}.live-match .live-match__refresh{align-self:flex-start}.live-match__team-name{font-size:15px}.live-match__score{font-size:44px}.live-match__status-line{justify-content:flex-start}}
+@media(max-width:600px){.live-match__identity{flex-direction:column;gap:7px}.live-match__crest{width:56px;height:56px}}

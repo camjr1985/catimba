@@ -11,7 +11,7 @@ import { enhanceScoreInput } from './score-input.js?v=20261128-digitacao';
 import { readSavedSources,recoverMissing,buildHistoryRows } from './history-data.js?v=20261128-historico';
 import { mountSavedHistory } from './saved-history.js?v=20261128-historico';
 import { fetchLiveMatch } from './live-match-data.js?v=20261128-ao-vivo';
-import { mountLiveMatch } from './live-match.js?v=20261128-ao-vivo';
+import { mountLiveMatch } from './live-match.js?v=20261128-escudos';
 
 const $ = id => document.getElementById(id);
 const KEY = 'catimba:v2';
